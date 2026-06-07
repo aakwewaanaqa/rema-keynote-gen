@@ -11,7 +11,8 @@
 ## 安裝
 
 分享 `install.command` 給同工，雙擊執行，照指示操作即可。
-安裝完成後桌面會出現 `rema-keynote-gen` 資料夾。
+安裝完成後 `~/Documents/rema-keynote-gen` 會出現程式資料夾。
+在 Finder 按 `Cmd + Shift + O` 可以快速開啟文件夾。
 
 ## 執行
 

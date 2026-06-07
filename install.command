@@ -1,7 +1,7 @@
 #!/bin/bash
 
-REPO_URL="https://github.com/YOUR_GITHUB_USERNAME/rema-keynote-gen.git"
-INSTALL_DIR="$HOME/Desktop/rema-keynote-gen"
+REPO_URL="https://github.com/aakwewaanaqa/rema-keynote-gen.git"
+INSTALL_DIR="$HOME/Documents/rema-keynote-gen"
 
 clear
 echo "================================"
@@ -33,7 +33,7 @@ chmod +x "$INSTALL_DIR/start.command"
 echo ""
 echo "================================"
 echo "  安裝完成！"
-echo "  桌面出現了 rema-keynote-gen 資料夾"
+echo "  文件夾出現了 rema-keynote-gen 資料夾"
 echo "  之後雙擊 start.command 執行"
 echo "================================"
 echo ""
