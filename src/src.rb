@@ -1,7 +1,7 @@
-Dir['shared/*.rb'].each { |rb|
-  require_relative rb
+Dir[File.join(__dir__, 'shared/*.rb')].each { |rb|
+  require rb
 }
 
-Dir['domain/**/*.rb'].each { |rb|
-  require_relative rb
+Dir[File.join(__dir__, 'domain/**/*.rb')].each { |rb|
+  require rb
 }

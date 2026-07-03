@@ -2,7 +2,7 @@ module Domain
   module SearchDsl
     module Tokenize
       DO_IDENTIFIER = -> sc {
-        return nil if sc || sc.done?
+        return nil if sc.nil? || sc.done?
 
         pos = sc.readable_pos
         text = ''
@@ -22,7 +22,7 @@ module Domain
       }
 
       DO_COMMA = -> sc {
-        return nil if sc || sc.done?
+        return nil if sc.nil? || sc.done?
 
         pos = sc.readable_pos
         if match_peak = sc.match_advance(/[,，]/)
@@ -37,7 +37,7 @@ module Domain
       }
 
       DO_COLON = -> sc {
-        return nil if sc || sc.done?
+        return nil if sc.nil? || sc.done?
 
         pos = sc.readable_pos
         if match_peak = sc.match_advance(/[:：]/)
@@ -52,7 +52,7 @@ module Domain
       }
 
       DO_HYPHEN = -> sc {
-        return nil if sc || sc.done?
+        return nil if sc.nil? || sc.done?
 
         pos = sc.readable_pos
         if match_peak = sc.match_advance(/[\-−—－\-−~～]/)
@@ -67,7 +67,7 @@ module Domain
       }
 
       DO_NUMBER = -> sc {
-        return nil if sc || sc.done?
+        return nil if sc.nil? || sc.done?
 
         pos = sc.readable_pos
         text = ''
@@ -94,7 +94,7 @@ module Domain
             DO_COMMA.(sc)     ||
             DO_COLON.(sc)     ||
             DO_HYPHEN.(sc)    ||
-            DO_IDENTIFER.(sc)
+            DO_IDENTIFIER.(sc)
 
           if token
             tokens << token
@@ -108,6 +108,8 @@ module Domain
             )
           end
         end
+
+        return tokens
       }
     end
   end
