@@ -1,0 +1,42 @@
+#! line=5
+#! placeholders=ref,ref2,Number,cn,en
+
+# all
+
+詩篇
+PSALM
+23:1
+（大衛的詩。）耶和華是我的牧者，我必不致缺乏。
+A psalm of David. The Lord is my shepherd, I lack nothing.
+
+詩篇
+PSALM
+23:2
+他使我躺臥在青草地上，領我在可安歇的水邊。
+He makes me lie down in green pastures, he leads me beside quiet waters,
+
+詩篇
+PSALM
+23:3
+他使我的靈魂甦醒，為自己的名引導我走義路。
+he refreshes my soul. He guides me along the right paths for his name’s sake.
+
+詩篇
+PSALM
+23:4
+我雖然行過死蔭的幽谷，也不怕遭害，因為你與我同在；你的杖，你的竿，都安慰我。
+Even though I walk through the darkest valley, I will fear no evil, for you are with me; your rod and your staff, they comfort me.
+
+詩篇
+PSALM
+23:5
+在我敵人面前，你為我擺設筵席；你用油膏了我的頭，使我的福杯滿溢。
+You prepare a table before me in the presence of my enemies. You anoint my head with oil; my cup overflows.
+
+詩篇
+PSALM
+23:6
+我一生一世必有恩惠慈愛隨著我；我且要住在耶和華的殿中，直到永遠。
+Surely your goodness and love will follow me all the days of my life, and I will dwell in the house of the Lord forever.
+
+# end all
