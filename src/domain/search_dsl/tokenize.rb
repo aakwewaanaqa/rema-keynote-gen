@@ -51,6 +51,21 @@ module Domain
         return nil
       }
 
+      DO_SEMICOLON = -> sc {
+        return nil if sc.nil? || sc.done?
+
+        pos = sc.readable_pos
+        if match_peak = sc.match_advance(/[;；]/)
+          return ::Shared::Token.new(
+            :semicolon,
+            ';',
+            pos
+          )
+        end
+
+        return nil
+      }
+
       DO_HYPHEN = -> sc {
         return nil if sc.nil? || sc.done?
 
@@ -93,6 +108,7 @@ module Domain
             DO_NUMBER.(sc)    ||
             DO_COMMA.(sc)     ||
             DO_COLON.(sc)     ||
+            DO_SEMICOLON.(sc) ||
             DO_HYPHEN.(sc)    ||
             DO_IDENTIFIER.(sc)
 

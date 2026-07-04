@@ -11,9 +11,9 @@ class TestSearchDsl < Minitest::Test
   end
 
   def test_
-    sc = ::Shared::StringConsumer.new '馬太福音3:4,5-7'
+    sc = ::Shared::StringConsumer.new '馬太福音3:4,5～7；彼得前書1:7'
     tokens = ::Domain::SearchDsl::Tokenize::TOKENIZE.(sc)
-    assert_equal(tokens.length, 8)
+    assert_equal(tokens.length, 13)
     assert_equal(tokens.map(&:last), [
       :identifier,
       :number,
@@ -23,6 +23,11 @@ class TestSearchDsl < Minitest::Test
       :number,
       :hyphen,
       :number,
+      :semicolon,
+      :identifier,
+      :number,
+      :colon,
+      :number
     ])
   end
 end
