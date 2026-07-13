@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require_relative '../lib/lyrics_parser'
-require_relative '../lib/keynote_runner'
+require_relative '../src/lyrics_parser'
+require_relative '../src/keynote_runner'
 
 def choose_file(prompt)
   result = `osascript -e 'POSIX path of (choose file with prompt "#{prompt}")'`.chomp
