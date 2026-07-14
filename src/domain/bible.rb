@@ -16,13 +16,13 @@ module Domain
       normalized = str.downcase.gsub(/\s+/, '')
 
       CHAPTERS.find { |chap|
-        en = chap.english.downcase.gsub(/\s+/, '')
-        chap.code.to_s.downcase == normalized                         ||
-        en == normalized                                              ||
-        chap.chinese == str                                           ||
-        chap.acronyms.any? { |a| a.downcase == normalized }           ||
-        en.start_with?(normalized)                                    ||
-        chap.acronyms.any? { |a| a.downcase.start_with?(normalized) } ||
+        en = chap[:english].downcase.gsub(/\s+/, '')
+        chap[:code].to_s.downcase == normalized                         ||
+        en == normalized                                                ||
+        chap[:chinese] == str                                           ||
+        chap[:acronyms].any? { |a| a.downcase == normalized }           ||
+        en.start_with?(normalized)                                      ||
+        chap[:acronyms].any? { |a| a.downcase.start_with?(normalized) } ||
         LEVENSHTEIN.(en, normalized) <= 2
       }
     }

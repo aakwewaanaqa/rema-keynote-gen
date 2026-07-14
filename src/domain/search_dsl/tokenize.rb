@@ -6,7 +6,7 @@ module Domain
 
         pos = sc.readable_pos
         text = ''
-        while peak_match = sc.match_advance(/\W/)
+        while peak_match = sc.match_advance(/[^\d\s,，:：;；\-−—－~～]/)
           text << peak_match.to_s
         end
 
