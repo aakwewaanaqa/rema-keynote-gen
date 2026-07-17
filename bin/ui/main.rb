@@ -29,7 +29,7 @@ def lookup_bible_window
 end
 
 include Glimmer
-window('簡報生成/首頁', 100, 200) {
+window('首頁', 100, 200) {
   margined true
 
   vertical_box {
