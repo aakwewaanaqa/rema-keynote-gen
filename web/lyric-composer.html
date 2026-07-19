@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lyrics Composer_v4.1</title>
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--text:#202124;--muted:#6b7280;--line:#d9dde3;--primary:#2563eb;--danger:#b42318}
+*{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","PingFang TC",sans-serif;background:var(--bg);color:var(--text)}
+header{padding:22px 28px;background:#111827;color:#fff} header h1{margin:0 0 6px;font-size:24px} header p{margin:0;color:#d1d5db;font-size:14px}
+main{max-width:1500px;margin:auto;padding:20px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+h2{font-size:18px;margin:0 0 14px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.drop{border:1px dashed #9ca3af;border-radius:10px;padding:12px;background:#fafafa}.drop strong{display:block;margin-bottom:8px}
+textarea{width:100%;min-height:150px;border:1px solid var(--line);border-radius:8px;padding:10px;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical}
+input[type=file]{width:100%;margin-bottom:8px}button,.btn{border:0;border-radius:8px;padding:9px 13px;font-weight:600;cursor:pointer}
+.primary{background:var(--primary);color:#fff}.secondary{background:#e5e7eb;color:#111827}.danger{background:#fee4e2;color:var(--danger)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.note{font-size:13px;color:var(--muted);line-height:1.5}.status{padding:10px 12px;border-radius:8px;background:#eef2ff;color:#3730a3;font-size:14px}
+table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid var(--line);padding:7px;vertical-align:top}th{background:#f3f4f6;font-size:13px}
+td.idx{width:54px;text-align:center;color:var(--muted)}td textarea{min-height:72px;border:0;padding:5px;background:transparent}td.actions{width:72px;text-align:center}
+select,input[type=text]{border:1px solid var(--line);border-radius:7px;padding:8px;background:#fff}.options{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}@media(max-width:900px){.options{grid-template-columns:1fr 1fr}}
+.preview{white-space:pre-wrap;background:#111827;color:#f9fafb;padding:14px;border-radius:9px;min-height:180px;font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:460px;overflow:auto}
+.small{font-size:12px}.badge{display:inline-block;padding:2px 8px;border-radius:99px;background:#e5e7eb;font-size:12px}
+</style>
+</head>
+<body>
+<header><h1>Lyrics Composer_v4.1</h1><p>解析歌詞 TXT、逐頁對齊、拆出單語歌詞，再輸出 ProPresenter 或 Rema 用 TXT。</p></header>
+<main>
+
+<section class="panel">
+<h2>1. 解析既有多語歌詞 TXT</h2>
+<div class="grid" style="grid-template-columns:1.5fr .8fr">
+  <div class="drop">
+    <strong>貼上或匯入混合語言 TXT</strong>
+    <input type="file" accept=".txt,text/plain" onchange="loadMixedFile(event)">
+    <textarea id="mixed-src" placeholder="CE 範例：
+中文第一句
+English line 1
+中文第二句
+English line 2"></textarea>
+  </div>
+  <div>
+    <label><strong>來源格式</strong></label>
+    <select id="mixed-format" style="width:100%;margin-top:8px" onchange="syncMixedOrder()">
+      <option value="CE">CE：中文／英文</option>
+      <option value="CK">CK：中文／韓文</option>
+      <option value="EC">EC：英文／中文</option>
+      <option value="KC">KC：韓文／中文</option>
+      <option value="CEK">CEK：中文／英文／韓文</option>
+      <option value="CKE">CKE：中文／韓文／英文</option>
+      <option value="custom">自訂順序</option>
+    </select>
+    <div style="margin-top:12px"><label>第一行<select id="mixed1" style="width:100%;margin-top:5px"><option value="cn">中文 CN</option><option value="en">英文 EN</option><option value="kr">韓文 KR</option></select></label></div>
+    <div style="margin-top:10px"><label>第二行<select id="mixed2" style="width:100%;margin-top:5px"><option value="en">英文 EN</option><option value="cn">中文 CN</option><option value="kr">韓文 KR</option><option value="">不使用</option></select></label></div>
+    <div style="margin-top:10px"><label>第三行<select id="mixed3" style="width:100%;margin-top:5px"><option value="">不使用</option><option value="cn">中文 CN</option><option value="en">英文 EN</option><option value="kr">韓文 KR</option></select></label></div>
+    <button class="primary" style="width:100%;margin-top:16px" onclick="parseMixed()">固定行數解析並拆解</button>
+    <p class="note">CE／CK 每 2 行一頁；CEK／CKE 每 3 行一頁。空白行會自動忽略。</p>
+  </div>
+</div>
+<div id="parse-status" class="status" style="margin-top:12px">尚未解析混合語言檔案。</div>
+
+<div style="margin-top:16px">
+<h3 style="font-size:16px;margin:0 0 10px">拆解結果</h3>
+<p class="note">解析 CE 後可複製 EN；再解析 CK 並帶入單語欄位，最後貼回 EN，即可組成 CEK。</p>
+<div class="grid">
+  <div class="drop"><div class="toolbar" style="justify-content:space-between;margin-bottom:8px"><strong>中文 CN</strong><button class="secondary small" onclick="copySplit('cn')">複製 CN</button></div><textarea id="split-cn" readonly></textarea></div>
+  <div class="drop"><div class="toolbar" style="justify-content:space-between;margin-bottom:8px"><strong>英文 EN</strong><button class="secondary small" onclick="copySplit('en')">複製 EN</button></div><textarea id="split-en" readonly></textarea></div>
+  <div class="drop"><div class="toolbar" style="justify-content:space-between;margin-bottom:8px"><strong>韓文 KR</strong><button class="secondary small" onclick="copySplit('kr')">複製 KR</button></div><textarea id="split-kr" readonly></textarea></div>
+</div>
+<div class="toolbar" style="margin-top:10px"><button class="secondary" onclick="sendSplitToSingle()">將拆解結果帶入單語欄位</button></div>
+</div>
+</section>
+
+<section class="panel">
+<h2>2. 匯入單語歌詞</h2>
+<div class="grid">
+  <div class="drop"><strong>中文 CN（基準）</strong><input type="file" accept=".txt,text/plain" onchange="loadFile(event,'cn')"><textarea id="src-cn"></textarea></div>
+  <div class="drop"><strong>英文 EN</strong><input type="file" accept=".txt,text/plain" onchange="loadFile(event,'en')"><textarea id="src-en"></textarea></div>
+  <div class="drop"><strong>韓文 KR</strong><input type="file" accept=".txt,text/plain" onchange="loadFile(event,'kr')"><textarea id="src-kr"></textarea></div>
+</div>
+<div class="toolbar" style="margin-top:12px"><button class="primary" onclick="buildRows()">建立／重新對齊</button><span class="note">每一行視為一頁中的一個語言欄位。</span></div>
+</section>
+
+<section class="panel">
+<h2>3. 逐頁檢查與修正</h2>
+<div id="status" class="status">尚未建立對齊資料。</div>
+<div class="toolbar" style="margin:12px 0"><button class="secondary" onclick="addRow()">新增一頁</button><button class="secondary" onclick="saveProject()">儲存工作檔 JSON</button><label class="btn secondary">載入工作檔 JSON<input type="file" accept=".json" onchange="loadProject(event)" style="display:none"></label></div>
+<div style="overflow:auto"><table><thead><tr><th style="width:54px">頁</th><th>CN</th><th>EN</th><th>KR</th><th style="width:72px">操作</th></tr></thead><tbody id="rows"></tbody></table></div>
+</section>
+
+<section class="panel">
+<h2>4. 設定輸出格式</h2>
+<div class="toolbar" style="margin-bottom:14px"><button class="secondary" onclick="preset('CE')">CE</button><button class="secondary" onclick="preset('CK')">CK</button><button class="secondary" onclick="preset('CEK')">CEK</button><button class="secondary" onclick="preset('C')">C</button></div>
+<div class="options">
+<label>第一行<select id="lang1" onchange="renderPreview()"><option value="cn">中文 CN</option><option value="en">英文 EN</option><option value="kr">韓文 KR</option><option value="">不使用</option></select></label>
+<label>第二行<select id="lang2" onchange="renderPreview()"><option value="en">英文 EN</option><option value="cn">中文 CN</option><option value="kr">韓文 KR</option><option value="">不使用</option></select></label>
+<label>第三行<select id="lang3" onchange="renderPreview()"><option value="">不使用</option><option value="cn">中文 CN</option><option value="en">英文 EN</option><option value="kr">韓文 KR</option></select></label>
+<label>輸出類型<select id="outputType" onchange="renderPreview()"><option value="propresenter">ProPresenter TXT</option><option value="wrapped">Rema 用 TXT</option></select></label>
+<label>空翻譯處理<select id="emptyMode" onchange="renderPreview()"><option value="skip">略過空白語言行</option><option value="keep">保留空白行</option><option value="mark">標示 [缺少翻譯]</option></select></label>
+<label>輸出檔名<input id="filename" type="text" value="lyrics_CE.txt"></label>
+<label>換行格式<select id="lineEnding" onchange="renderPreview()"><option value="lf">LF（Mac／一般）</option><option value="crlf">CRLF</option></select></label>
+</div>
+<p class="note">「Rema 用 TXT」會依目前選擇的語言數量自動產生 line，並依語言順序產生 placeholders。</p>
+</section>
+
+<section class="panel">
+<h2>5. 預覽與下載</h2>
+<div class="toolbar" style="margin-bottom:12px"><button class="primary" onclick="downloadTxt()">下載 TXT</button><button class="secondary" onclick="copyOutput()">複製輸出內容</button><span id="countBadge" class="badge">0 slides</span></div>
+<div id="preview" class="preview"></div>
+</section>
+
+</main>
+<script>
+let data=[];
+
+function loadMixedFile(ev){
+  const file=ev.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>document.getElementById('mixed-src').value=reader.result;
+  reader.readAsText(file,'utf-8');
+}
+function syncMixedOrder(){
+  const maps={CE:['cn','en',''],CK:['cn','kr',''],EC:['en','cn',''],KC:['kr','cn',''],CEK:['cn','en','kr'],CKE:['cn','kr','en']};
+  const value=document.getElementById('mixed-format').value;
+  if(!maps[value])return;
+  ['mixed1','mixed2','mixed3'].forEach((id,i)=>document.getElementById(id).value=maps[value][i]);
+}
+function parseMixed(){
+  const raw=document.getElementById('mixed-src').value.replace(/\r\n?/g,'\n');
+  const langs=['mixed1','mixed2','mixed3'].map(id=>document.getElementById(id).value).filter(Boolean);
+  if(!raw.trim()){alert('請先匯入或貼上混合語言 TXT');return;}
+  if(new Set(langs).size!==langs.length){alert('來源語言順序不可重複');return;}
+  const lines=raw.split('\n').map(x=>x.trim()).filter(x=>x!=='');
+  const parsed=[];
+  let incomplete=0;
+  for(let i=0;i<lines.length;i+=langs.length){
+    const group=lines.slice(i,i+langs.length);
+    const row={cn:'',en:'',kr:''};
+    langs.forEach((lang,j)=>row[lang]=group[j]||'');
+    if(group.length<langs.length)incomplete++;
+    parsed.push(row);
+  }
+  data=parsed;
+  syncSplitOutputs();
+  renderTable();
+  renderPreview();
+  document.getElementById('status').textContent=`已由混合語言檔建立 ${data.length} 頁。`;
+  document.getElementById('parse-status').textContent=`解析完成：${data.length} 頁；${langs.length} 種語言。`+(incomplete?' 最後一組行數不足，請檢查。':'');
+}
+function syncSplitOutputs(){
+  document.getElementById('split-cn').value=data.map(r=>r.cn).filter(Boolean).join('\n');
+  document.getElementById('split-en').value=data.map(r=>r.en).filter(Boolean).join('\n');
+  document.getElementById('split-kr').value=data.map(r=>r.kr).filter(Boolean).join('\n');
+}
+async function copySplit(lang){
+  const el=document.getElementById('split-'+lang);
+  try{await navigator.clipboard.writeText(el.value);alert(`已複製 ${lang.toUpperCase()} 歌詞`);}
+  catch(e){el.focus();el.select();alert('已選取文字，請按 Command+C');}
+}
+function sendSplitToSingle(){
+  document.getElementById('src-cn').value=document.getElementById('split-cn').value;
+  document.getElementById('src-en').value=document.getElementById('split-en').value;
+  document.getElementById('src-kr').value=document.getElementById('split-kr').value;
+  alert('已帶入單語欄位。');
+}
+function normalize(text){return text.replace(/\r\n?/g,'\n').split('\n').map(x=>x.trim()).filter(x=>x!=='');}
+function loadFile(ev,lang){
+  const file=ev.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>document.getElementById('src-'+lang).value=reader.result;
+  reader.readAsText(file,'utf-8');
+}
+function buildRows(){
+  const cn=normalize(document.getElementById('src-cn').value);
+  const en=normalize(document.getElementById('src-en').value);
+  const kr=normalize(document.getElementById('src-kr').value);
+  const n=Math.max(cn.length,en.length,kr.length);
+  data=Array.from({length:n},(_,i)=>({cn:cn[i]||'',en:en[i]||'',kr:kr[i]||''}));
+  syncSplitOutputs();renderTable();renderPreview();
+  document.getElementById('status').textContent=`已建立 ${n} 頁。CN ${cn.length} 行／EN ${en.length} 行／KR ${kr.length} 行。`;
+}
+function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function renderTable(){
+  const tb=document.getElementById('rows');tb.innerHTML='';
+  data.forEach((r,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="idx">${i+1}</td>
+    <td><textarea oninput="updateCell(${i},'cn',this.value)">${esc(r.cn)}</textarea></td>
+    <td><textarea oninput="updateCell(${i},'en',this.value)">${esc(r.en)}</textarea></td>
+    <td><textarea oninput="updateCell(${i},'kr',this.value)">${esc(r.kr)}</textarea></td>
+    <td class="actions"><button class="danger small" onclick="deleteRow(${i})">刪除</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+function updateCell(i,k,v){data[i][k]=v;syncSplitOutputs();renderPreview();}
+function addRow(){data.push({cn:'',en:'',kr:''});syncSplitOutputs();renderTable();renderPreview();}
+function deleteRow(i){data.splice(i,1);syncSplitOutputs();renderTable();renderPreview();}
+function preset(code){
+  const map={C:['cn','',''],CE:['cn','en',''],CK:['cn','kr',''],CEK:['cn','en','kr']};
+  ['lang1','lang2','lang3'].forEach((id,i)=>document.getElementById(id).value=map[code][i]);
+  document.getElementById('filename').value=`lyrics_${code}.txt`;
+  renderPreview();
+}
+function selectedLangs(){return['lang1','lang2','lang3'].map(id=>document.getElementById(id).value).filter(Boolean);}
+function baseSlides(){
+  const langs=selectedLangs();
+  const mode=document.getElementById('emptyMode').value;
+  return data.map(row=>{
+    const lines=[];
+    langs.forEach(lang=>{
+      const value=(row[lang]||'').trimEnd();
+      if(value!=='')lines.push(value);
+      else if(mode==='keep')lines.push('');
+      else if(mode==='mark')lines.push('[缺少翻譯]');
+    });
+    return lines;
+  }).filter(lines=>lines.length>0 || mode==='keep');
+}
+function getOutput(){
+  const langs=selectedLangs();
+  const slides=baseSlides();
+  let out='';
+  if(document.getElementById('outputType').value==='wrapped'){
+    const body=slides.flat().join('\n');
+    out=`#! line= ${langs.length}\n#! placeholders= ${langs.join(',')}\n# all\n${body}\n# end all`;
+  }else{
+    out=slides.map(lines=>lines.join('\n')).join('\n\n');
+  }
+  if(document.getElementById('lineEnding').value==='crlf')out=out.replace(/\n/g,'\r\n');
+  return{out,slides};
+}
+function renderPreview(){
+  const result=getOutput();
+  document.getElementById('preview').textContent=result.out||'尚無輸出內容';
+  document.getElementById('countBadge').textContent=`${result.slides.length} slides`;
+}
+function downloadTxt(){
+  const result=getOutput();
+  if(!result.out){alert('沒有可輸出的內容');return;}
+  const blob=new Blob([new Uint8Array([0xEF,0xBB,0xBF]),result.out],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=document.getElementById('filename').value.trim()||'lyrics.txt';
+  a.click();URL.revokeObjectURL(a.href);
+}
+async function copyOutput(){
+  const result=getOutput();
+  try{await navigator.clipboard.writeText(result.out);alert('已複製');}
+  catch(e){alert('瀏覽器無法自動複製，請從預覽區手動複製');}
+}
+function saveProject(){
+  const payload={version:4,data,settings:{
+    lang1:document.getElementById('lang1').value,
+    lang2:document.getElementById('lang2').value,
+    lang3:document.getElementById('lang3').value,
+    outputType:document.getElementById('outputType').value,
+    emptyMode:document.getElementById('emptyMode').value,
+    filename:document.getElementById('filename').value,
+    lineEnding:document.getElementById('lineEnding').value
+  }};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='lyrics-project.json';a.click();URL.revokeObjectURL(a.href);
+}
+function loadProject(ev){
+  const file=ev.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const p=JSON.parse(reader.result);data=p.data||[];
+      if(p.settings)Object.entries(p.settings).forEach(([k,v])=>{const el=document.getElementById(k);if(el)el.value=v;});
+      syncSplitOutputs();renderTable();renderPreview();
+      document.getElementById('status').textContent=`已載入工作檔，共 ${data.length} 頁。`;
+    }catch(e){alert('JSON 格式錯誤');}
+  };
+  reader.readAsText(file);
+}
+syncMixedOrder();preset('CE');
+</script>
+</body>
+</html>
