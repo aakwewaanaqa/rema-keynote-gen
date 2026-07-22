@@ -1,13 +1,18 @@
 require_relative "../../src/shared/reactive_state"
+require_relative "../../src/service/github_micheal_chan_bible.s"
 require "glimmer-dsl-libui"
 
 def lookup_bible_window
   include Glimmer
-  q_state = ::Shared::ReactiveState.new(
+
+  result = nil
+  search_input = ::Shared::ReactiveState.new(
     nil,
     nil,
     -> old_val, new_val, changed {
-      puts new_val if changed
+      return unless changed
+      ast = Domain::SearchDsl::Ast.parse new_val
+      result = Domain::Service::GithubMichaelChanBible.qeury ast
     }
   )
 
@@ -15,14 +20,18 @@ def lookup_bible_window
     margined true
 
     vertical_box {
-      search_entry { |q|
+      search_entry { |e|
         stretchy false
         label '搜尋經節序號'
         text '太18:18-20'
 
         on_changed {
-          q_state.set q.text
+          search_input.set e.text
         }
+      }
+
+      multiline_entry { |e|
+        text 
       }
     }
 }.show

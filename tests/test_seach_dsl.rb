@@ -1,6 +1,7 @@
 require 'minitest/autorun'
 require 'pp'
 require_relative '../src/src.rb'
+require_relative '../src/service/github_micheal_chan_bible.s.rb'
 
 Ast = ::Domain::SearchDsl::Ast
 
@@ -115,5 +116,57 @@ class TestSearchDslAst < Minitest::Test
   def test_unknown_book_returns_empty
     q = parse('不存在書9:1')
     assert_equal 0, q.refs.length
+  end
+end
+
+class TestGithubMichaelChanBibleQuery < Minitest::Test
+  Bible = Service::GithubMichaelChanBible
+
+  def query(str, **opts)
+    Bible.query(Ast.parse(str), **opts)
+  end
+
+  def test_single_verse
+    results = query('創1:1')
+    assert_equal 1, results.length
+    assert_equal({ chapter: 1, verse: 1, text: '起初，神創造天地。' }, results[0].to_h)
+  end
+
+  def test_verse_range
+    results = query('創1:1-3')
+    assert_equal 3, results.length
+    assert_equal [1, 2, 3], results.map { |r| r[:verse] }
+  end
+
+  def test_mixed_verse_list
+    results = query('太5:3,5')
+    assert_equal 2, results.length
+    assert_equal [3, 5], results.map { |r| r[:verse] }
+  end
+
+  def test_whole_chapter
+    results = query('約3')
+    assert results.length > 1
+    assert results.all? { |r| r[:chapter] == 3 }
+  end
+
+  def test_multiple_books
+    results = query('太5:3;約3:16')
+    assert_equal 2, results.length
+    assert_equal 5,  results[0][:chapter]
+    assert_equal 3,  results[0][:verse]
+    assert_equal 3,  results[1][:chapter]
+    assert_equal 16, results[1][:verse]
+  end
+
+  def test_unknown_book_returns_empty
+    results = query('不存在書9:1')
+    assert_equal [], results
+  end
+
+  def test_translation_kjv
+    results = query('Gen1:1', translation: 'kjv')
+    assert_equal 1, results.length
+    assert_match(/beginning/i, results[0][:text])
   end
 end
