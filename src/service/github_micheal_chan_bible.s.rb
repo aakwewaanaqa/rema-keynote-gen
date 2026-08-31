@@ -41,7 +41,7 @@ module Service
         chapter_lines.filter_map do |line|
           v = parse_verse_line(line)
           next unless v
-          next if ref.verses && !verse_in_list?(v[:verse], ref.verses)
+          next if ref.verses && !Domain::SearchDsl::Ast.verse_in_list?(v.verse, ref.verses)
           v
         end
       end
@@ -66,15 +66,6 @@ module Service
         m[2].to_i,
         m[3].strip
       )
-    end
-
-    def self.verse_in_list?(verse_num, verse_list)
-      verse_list.any? do |v|
-        case v
-        when Domain::SearchDsl::Ast::Single then v.verse == verse_num
-        when Domain::SearchDsl::Ast::VRange then verse_num >= v.from && verse_num <= v.to
-        end
-      end
     end
   end
 end

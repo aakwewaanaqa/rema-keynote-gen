@@ -1,14 +1,24 @@
 require 'uri'
 require 'net/http'
 require 'nokogiri'
+require_relative '../domain/bible'
+require_relative '../domain/interpret'
+require_relative '../domain/search_dsl/ast'
+require_relative 'bible_query_verse'
 
 module Service
   class SpringBibleService
-    def fetch_a_chapter(singular_index)
-      chapter_code = singular_index.chapter_code
-      offset = singular_index.chapter_offset
-      pure_index = ::Domain::Interpret.pure_index(chapter_code, offset)
+    # 輸入 Query AST，回傳 [BibleQueryVerse, ...]，經文來自 springbible.fhl.net（和合本）
+    def self.query(query_ast)
+      query_ast.refs.flat_map do |ref|
+        pure_index = ::Domain::Interpret.pure_index(ref.book, ref.chapter)
+        verses = fetch_a_chapter(pure_index)
 
+        verses.select { |v| ref.verses.nil? || ::Domain::SearchDsl::Ast.verse_in_list?(v.verse, ref.verses) }
+      end
+    end
+
+    def self.fetch_a_chapter(pure_index)
       uri = URI('https://springbible.fhl.net/Bible2/cgic201/read201.cgi')
       uri.query = URI.encode_www_form(
         na: 0,
@@ -25,14 +35,7 @@ module Service
       doc = Nokogiri::HTML(html)
 
       doc.css('body div ol li').each_with_index.map do |el, i|
-        Verse.new(
-          index: i + 1,
-          text: el.text.strip,
-          lang: 'zh-TW',
-          version: 'CUV',
-          book: singular_index.book,
-          chapter: singular_index.chapter
-        )
+        ::Service::BibleQueryVerse.new(nil, i + 1, el.text.strip)
       end
     end
   end

@@ -4,8 +4,8 @@ module Domain
     def self.pure_index chapter_code, chapter_offset
       i = 0
       ::Domain::Bible::CHAPTERS.each { |chapter|
-        break if chapter.code == chapter_code
-        i += chapter.length
+        break if chapter[:code] == chapter_code
+        i += chapter[:max]
       }
 
       i + chapter_offset

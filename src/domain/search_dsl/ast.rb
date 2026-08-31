@@ -103,6 +103,16 @@ module Domain
         Query.new(refs)
       }
 
+      # 節號是否落在 verses 清單（Single | VRange 混合）之中
+      def self.verse_in_list?(verse_num, verse_list)
+        verse_list.any? do |v|
+          case v
+          when Single then v.verse == verse_num
+          when VRange then verse_num >= v.from && (v.to.nil? || verse_num <= v.to)
+          end
+        end
+      end
+
       # 入口：字串 → Query AST
       def self.parse(str)
         sc = ::Shared::StringConsumer.new(str)
