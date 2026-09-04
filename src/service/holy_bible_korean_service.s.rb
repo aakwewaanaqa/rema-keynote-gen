@@ -31,7 +31,7 @@ module Service
       doc.css('ol[id^="b_"]').flat_map do |ol|
         start = ol['start'].to_i
         ol.css('li').each_with_index.map do |li, i|
-          ::Service::BibleQueryVerse.new(nil, start + i, li.text.strip)
+          ::Service::BibleQueryVerse.new(book_code, chapter, start + i, li.text.strip)
         end
       end
     end

@@ -62,7 +62,7 @@ module Service
       end
 
       verse_map.sort.map do |verse_num, parts|
-        ::Service::BibleQueryVerse.new(nil, verse_num, parts.join(' '))
+        ::Service::BibleQueryVerse.new(book_code, chapter, verse_num, parts.join(' '))
       end
     end
   end

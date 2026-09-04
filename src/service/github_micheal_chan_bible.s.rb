@@ -39,7 +39,7 @@ module Service
         chapter_lines = lines.select { |l| l.start_with?(chapter_prefix) }
 
         chapter_lines.filter_map do |line|
-          v = parse_verse_line(line)
+          v = parse_verse_line(line, ref.book)
           next unless v
           next if ref.verses && !Domain::SearchDsl::Ast.verse_in_list?(v.verse, ref.verses)
           v
@@ -58,10 +58,11 @@ module Service
     end
 
     # "1.3 神說：..." → { chapter: 1, verse: 3, text: "神說：..." }
-    def self.parse_verse_line(line)
+    def self.parse_verse_line(line, book)
       m = line.match(/\A(\d+)\.(\d+)\s+(.+)/)
       return nil unless m
       return ::Service::BibleQueryVerse.new(
+        book,
         m[1].to_i,
         m[2].to_i,
         m[3].strip

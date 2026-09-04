@@ -12,13 +12,13 @@ module Service
     def self.query(query_ast)
       query_ast.refs.flat_map do |ref|
         pure_index = ::Domain::Interpret.pure_index(ref.book, ref.chapter)
-        verses = fetch_a_chapter(pure_index)
+        verses = fetch_a_chapter(pure_index, ref.book, ref.chapter)
 
         verses.select { |v| ref.verses.nil? || ::Domain::SearchDsl::Ast.verse_in_list?(v.verse, ref.verses) }
       end
     end
 
-    def self.fetch_a_chapter(pure_index)
+    def self.fetch_a_chapter(pure_index, book, chapter)
       uri = URI('https://springbible.fhl.net/Bible2/cgic201/read201.cgi')
       uri.query = URI.encode_www_form(
         na: 0,
@@ -35,7 +35,7 @@ module Service
       doc = Nokogiri::HTML(html)
 
       doc.css('body div ol li').each_with_index.map do |el, i|
-        ::Service::BibleQueryVerse.new(nil, i + 1, el.text.strip)
+        ::Service::BibleQueryVerse.new(book, chapter, i + 1, el.text.strip)
       end
     end
   end
