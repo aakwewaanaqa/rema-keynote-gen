@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:rema-keynote-gen}/bin/ui/swift_demo",
+            "name": "Debug BibleQueryDemo (bin/ui/swift_demo)",
+            "target": "BibleQueryDemo",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug BibleQueryDemo (bin/ui/swift_demo)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:rema-keynote-gen}/bin/ui/swift_demo",
+            "name": "Release BibleQueryDemo (bin/ui/swift_demo)",
+            "target": "BibleQueryDemo",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release BibleQueryDemo (bin/ui/swift_demo)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:rema-keynote-gen}/bin/ui/swift_demo",
+            "name": "Debug AdvancedBibleQueryApp (bin/ui/swift_demo)",
+            "target": "AdvancedBibleQueryApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug AdvancedBibleQueryApp (bin/ui/swift_demo)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:rema-keynote-gen}/bin/ui/swift_demo",
+            "name": "Release AdvancedBibleQueryApp (bin/ui/swift_demo)",
+            "target": "AdvancedBibleQueryApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release AdvancedBibleQueryApp (bin/ui/swift_demo)"
+        }
+    ]
+}

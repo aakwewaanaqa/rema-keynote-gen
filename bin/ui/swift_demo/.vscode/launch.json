@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:swift_demo}",
+            "name": "Debug BibleQueryDemo",
+            "target": "BibleQueryDemo",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug BibleQueryDemo"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:swift_demo}",
+            "name": "Release BibleQueryDemo",
+            "target": "BibleQueryDemo",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release BibleQueryDemo"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:swift_demo}",
+            "name": "Debug AdvancedBibleQueryApp",
+            "target": "AdvancedBibleQueryApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug AdvancedBibleQueryApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:swift_demo}",
+            "name": "Release AdvancedBibleQueryApp",
+            "target": "AdvancedBibleQueryApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release AdvancedBibleQueryApp"
+        }
+    ]
+}
