@@ -21,7 +21,7 @@ struct BibleSearchResult: Identifiable {
     var id = UUID()
     var searchDsl: String
     var config: BibleServiceConfig
-    var verses: [QueriedVerse]
+    var verses: [QueriedVerseGroup]
 }
 
 struct AdvancedBibleQueryView: View {

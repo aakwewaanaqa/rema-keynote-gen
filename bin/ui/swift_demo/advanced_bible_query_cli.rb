@@ -2,11 +2,13 @@
 # frozen_string_literal: true
 
 # 給 AppKit 端呼叫的 CLI 包裝，對應 bin/ui/windows/advanced_bible_query_window.rb 的 run_query 邏輯。
-# 這裡只負責查經文，直接輸出結構化的節資料給 Swift 端存成 QueriedVerse 陣列——
+# 這裡只負責查經文，直接輸出結構化的節資料給 Swift 端存成 QueriedVerseGroup 陣列——
 # #region/{token} 範本代換是「產生 Keynote」那一步的事，跟查詢分開。
 # 來源不是自動掃描出來的，是由第二個參數明講要查哪些來源（對應 SwiftUI 那邊的服務勾選框）。
 # 用法：ruby advanced_bible_query_cli.rb "<搜尋經節序號>" "<啟用的來源 token，逗號分隔，如 fhl,niv>"
-# 輸出：JSON { status: "...", verses: [{ service:, translation:, book:, chapter:, verse:, content: }, ...] } 到 stdout
+# 輸出：JSON { status: "...", verses: [{ chapter:, verse:, translations: [{ service:, translation:, book:, content: }, ...] }, ...] } 到 stdout
+# 同一節經文的不同譯本合併成一個 item（translations 陣列），而不是每個譯本各自一筆——
+# Domain::BibleQuery.run 回傳的 entries 本來就是照這樣分組的，這裡直接沿用，不要拆散了又要 Swift 端重組。
 
 require "json"
 require_relative "../../../src/shared/readable_pos"
@@ -82,12 +84,12 @@ if outcome[:error]
   exit
 end
 
-verses = outcome[:entries].flat_map { |e|
+verses = outcome[:entries].map { |e|
   info = Domain::Bible.chapter_info(e[:book])
 
   # 不用 filter_map：Swift App 啟動時繼承的 PATH 沒有終端機的 rbenv shim，
   # `/usr/bin/env ruby` 常常會落到系統內建的舊版 Ruby，filter_map 是 2.7 才有的方法
-  e[:texts].each_with_index.map { |text, idx|
+  verse_translations = e[:texts].each_with_index.map { |text, idx|
     next nil if text.nil? || text.empty?
 
     token = token_sources[idx][0]
@@ -97,12 +99,18 @@ verses = outcome[:entries].flat_map { |e|
       service: token,
       translation: translations[token] || token,
       book: book_name,
-      chapter: e[:chapter],
-      verse: e[:verse],
       content: text,
     }
   }.compact
-}
+
+  next nil if verse_translations.empty?
+
+  {
+    chapter: e[:chapter],
+    verse: e[:verse],
+    translations: verse_translations,
+  }
+}.compact
 
 status = "共 #{outcome[:entries].size} 節，已取得經文"
 

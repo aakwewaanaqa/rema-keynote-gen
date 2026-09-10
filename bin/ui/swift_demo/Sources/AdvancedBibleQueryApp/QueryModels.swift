@@ -1,19 +1,26 @@
 import Foundation
 
-// 對照 advanced_bible_query_cli.rb 輸出的單節經文，service 是來源 token（fhl/niv/nkjv/gae/local），
-// translation 是給人看的來源名稱（信望愛 CUV/NIV/...）
-struct QueriedVerse: Decodable, Hashable {
+// 同一節經文、單一譯本的內容。service 是來源 token（fhl/niv/nkjv/gae/local），
+// translation 是給人看的來源名稱（信望愛 CUV/NIV/...）。book 會跟著這個譯本的語言變
+// （中文譯本顯示中文書名、NIV/NKJV 顯示英文書名、개역개정 顯示韓文書名），所以放在這裡而不是外層。
+struct VerseTranslation: Decodable, Hashable {
     var service: String
     var translation: String
     var book: String
+    var content: String
+}
+
+// 同一節經文，底下疊多個譯本——對照 advanced_bible_query_cli.rb 輸出的 verses 陣列，
+// 一節一個 item，不是一節×一譯本一個 item
+struct QueriedVerseGroup: Decodable, Hashable {
     var chapter: Int
     var verse: Int
-    var content: String
+    var translations: [VerseTranslation]
 }
 
 struct QueryResult: Decodable {
     let status: String?
-    let verses: [QueriedVerse]?
+    let verses: [QueriedVerseGroup]?
     let error: String?
 }
 
@@ -28,7 +35,7 @@ struct KeynotePlaceholder: Identifiable, Hashable {
 }
 
 func runBibleQueryCLI(scriptDir: URL, rawText: String, enabledTokens: String)
-    -> Result<(String, [QueriedVerse]), QueryError>
+    -> Result<(String, [QueriedVerseGroup]), QueryError>
 {
     let cliPath = scriptDir.appendingPathComponent("advanced_bible_query_cli.rb")
 

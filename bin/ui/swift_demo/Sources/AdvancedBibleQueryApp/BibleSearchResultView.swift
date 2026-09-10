@@ -14,13 +14,14 @@ struct BibleSearchResultView: View {
         return store.results.first { $0.id == resultID }
     }
 
-    // 符合搜尋字串的經節在 result.verses 中的索引
+    // 符合搜尋字串的經節在 result.verses 中的索引；只要該節任一譯本符合就算
     var matchedIndices: [Int] {
         guard let result, !filterText.isEmpty else { return [] }
         return result.verses.indices.filter { idx in
-            let verse = result.verses[idx]
-            return verse.content.localizedCaseInsensitiveContains(filterText) ||
-                   verse.book.localizedCaseInsensitiveContains(filterText)
+            result.verses[idx].translations.contains { translation in
+                translation.content.localizedCaseInsensitiveContains(filterText) ||
+                translation.book.localizedCaseInsensitiveContains(filterText)
+            }
         }
     }
 
@@ -56,9 +57,9 @@ struct BibleSearchResultView: View {
     private func verseList(result: BibleSearchResult) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(result.verses.enumerated()), id: \.offset) { index, verse in
+                ForEach(Array(result.verses.enumerated()), id: \.offset) { index, verseGroup in
                     VerseRow(
-                        verse: verse,
+                        verseGroup: verseGroup,
                         filterText: filterText,
                         isCurrentMatch: currentMatchIndex < matchedIndices.count && matchedIndices[currentMatchIndex] == index
                     )
@@ -129,19 +130,22 @@ struct BibleSearchResultView: View {
     }
 }
 
-// 抽成獨立的 View，避免整個 body 表達式太複雜讓編譯器 type-check 逾時
+// 抽成獨立的 View，避免整個 body 表達式太複雜讓編譯器 type-check 逾時。
+// 一節經文一個 row，裡面疊多個譯本（每個譯本各自一小段）
 private struct VerseRow: View {
-    let verse: QueriedVerse
+    let verseGroup: QueriedVerseGroup
     let filterText: String
     let isCurrentMatch: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("\(verse.book) \(verse.chapter):\(verse.verse) · \(verse.translation)")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            content
-                .textSelection(.enabled)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(verseGroup.translations, id: \.self) { translation in
+                TranslationRow(
+                    verseGroup: verseGroup,
+                    translation: translation,
+                    filterText: filterText
+                )
+            }
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 4)
@@ -152,11 +156,28 @@ private struct VerseRow: View {
     private var backgroundColor: Color {
         isCurrentMatch ? Color.accentColor.opacity(0.15) : Color.clear
     }
+}
+
+// 同一節經文底下，單一譯本的內容
+private struct TranslationRow: View {
+    let verseGroup: QueriedVerseGroup
+    let translation: VerseTranslation
+    let filterText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(translation.book) \(verseGroup.chapter):\(verseGroup.verse) · \(translation.translation)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            content
+                .textSelection(.enabled)
+        }
+    }
 
     @ViewBuilder
     private var content: some View {
         if filterText.isEmpty {
-            Text(verse.content)
+            Text(translation.content)
         } else {
             Text(highlightedAttributedString)
         }
@@ -164,7 +185,7 @@ private struct VerseRow: View {
 
     // 把經文內容中符合搜尋字串的片段標黃，其餘保持原樣
     private var highlightedAttributedString: AttributedString {
-        var attributed = AttributedString(verse.content)
+        var attributed = AttributedString(translation.content)
         guard !filterText.isEmpty else { return attributed }
         var searchStart = attributed.startIndex
         while searchStart < attributed.endIndex,
