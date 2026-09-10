@@ -51,6 +51,15 @@ translations = {
   'nkjv'  => 'NKJV',
 }
 
+# 書卷名要跟著該譯本的語言變，不是每個譯本都硬塞中文書名
+book_name_keys = {
+  'local' => :chinese,
+  'fhl'   => :chinese,
+  'niv'   => :english,
+  'gae'   => :korean,
+  'nkjv'  => :english,
+}
+
 enabled_tokens = enabled_text.split(',').map(&:strip).reject(&:empty?)
 sources = token_sources.map { |token, service| [enabled_tokens.include?(token), service] }
 
@@ -75,7 +84,6 @@ end
 
 verses = outcome[:entries].flat_map { |e|
   info = Domain::Bible.chapter_info(e[:book])
-  book_name = (info && info[:chinese]) || e[:book].to_s
 
   # 不用 filter_map：Swift App 啟動時繼承的 PATH 沒有終端機的 rbenv shim，
   # `/usr/bin/env ruby` 常常會落到系統內建的舊版 Ruby，filter_map 是 2.7 才有的方法
@@ -83,6 +91,8 @@ verses = outcome[:entries].flat_map { |e|
     next nil if text.nil? || text.empty?
 
     token = token_sources[idx][0]
+    book_name_key = book_name_keys[token] || :chinese
+    book_name = (info && info[book_name_key]) || e[:book].to_s
     {
       service: token,
       translation: translations[token] || token,
