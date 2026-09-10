@@ -23,26 +23,26 @@ module Service
       "3John": '3John', Jude: 'Jude', Revelation: 'Rev'
     }.freeze
 
-    # 輸入 Query AST，回傳 [BibleQueryVerse, ...]，經文來自 biblegateway.com（NIV）
-    def self.query(query_ast)
+    # 輸入 Query AST，回傳 [BibleQueryVerse, ...]，經文來自 biblegateway.com
+    def self.query(query_ast, version: 'NIV')
       query_ast.refs.flat_map do |ref|
-        verses = fetch_a_chapter(ref.book, ref.chapter)
+        verses = fetch_a_chapter(ref.book, ref.chapter, version: version)
         verses.select { |v| ref.verses.nil? || ::Domain::SearchDsl::Ast.verse_in_list?(v.verse, ref.verses) }
       end
     end
 
-    def self.fetch_a_chapter(book_code, chapter)
+    def self.fetch_a_chapter(book_code, chapter, version: 'NIV')
       acronym = BOOK_ACRONYMS[book_code]
       raise "Unknown book: #{book_code}" unless acronym
 
       uri = URI('https://www.biblegateway.com/passage/')
-      uri.query = URI.encode_www_form(search: "#{acronym}#{chapter}", version: 'NIV')
+      uri.query = URI.encode_www_form(search: "#{acronym}#{chapter}", version: version)
 
       response = Net::HTTP.get_response(uri)
       html = response.body.force_encoding('UTF-8')
       doc = Nokogiri::HTML(html)
 
-      container = doc.at_css('div.std-text')
+      container = doc.at_css('div.passage-text')
       raise 'BibleGateway page structure changed' unless container
 
       container.css('h3, sup.crossreference, sup.footnote, sup.versenum, span.chapternum').each(&:remove)
@@ -64,6 +64,13 @@ module Service
       verse_map.sort.map do |verse_num, parts|
         ::Service::BibleQueryVerse.new(book_code, chapter, verse_num, parts.join(' '))
       end
+    end
+  end
+
+  # 跟 BibleGatewayService 共用同一支爬蟲，只是換一個 version 參數（NKJV）
+  class BibleGatewayServiceNKJV
+    def self.query(query_ast)
+      BibleGatewayService.query(query_ast, version: 'NKJV')
     end
   end
 end

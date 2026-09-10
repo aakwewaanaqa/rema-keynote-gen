@@ -1,0 +1,1 @@
+`cd #{__dir__} && swift run AdvancedBibleQueryApp`

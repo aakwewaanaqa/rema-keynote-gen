@@ -129,7 +129,7 @@ class TestGithubMichaelChanBibleQuery < Minitest::Test
   def test_single_verse
     results = query('創1:1')
     assert_equal 1, results.length
-    assert_equal({ chapter: 1, verse: 1, text: '起初，神創造天地。' }, results[0].to_h)
+    assert_equal({ book: :Genesis, chapter: 1, verse: 1, text: '起初，神創造天地。' }, results[0].to_h)
   end
 
   def test_verse_range

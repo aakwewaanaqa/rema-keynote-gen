@@ -5,7 +5,6 @@ let package = Package(
     name: "BibleQuerySwiftDemo",
     platforms: [.macOS(.v13)],
     targets: [
-        .executableTarget(name: "AdvancedBibleQueryApp"),
-        .executableTarget(name: "BibleQueryDemo"),
+        .executableTarget(name: "AdvancedBibleQueryApp")
     ]
 )

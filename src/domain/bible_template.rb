@@ -5,8 +5,9 @@ module Domain
     SOURCE_TOKENS = {
       'local' => 0, # 麥可陳(cuv2)
       'fhl'   => 1, # 信望愛聖經資源中心(和合本)
-      'niv'   => 2, # BibleGateway(NIV)（英語，未來會加 kjv）
+      'niv'   => 2, # BibleGateway(NIV)
       'gae'   => 3, # holybible.or.kr(개역개정)
+      'nkjv'  => 4, # BibleGateway(NKJV)
     }.freeze
 
     # 不查經文來源、而是從節資訊本身算出來的 token

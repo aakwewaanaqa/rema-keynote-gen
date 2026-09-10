@@ -38,12 +38,12 @@ module Service
         chapter_prefix = "#{ref.chapter}."
         chapter_lines = lines.select { |l| l.start_with?(chapter_prefix) }
 
-        chapter_lines.filter_map do |line|
+        chapter_lines.map { |line|
           v = parse_verse_line(line, ref.book)
-          next unless v
-          next if ref.verses && !Domain::SearchDsl::Ast.verse_in_list?(v.verse, ref.verses)
+          next nil unless v
+          next nil if ref.verses && !Domain::SearchDsl::Ast.verse_in_list?(v.verse, ref.verses)
           v
-        end
+        }.compact
       end
     end
 
