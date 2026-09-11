@@ -29,6 +29,17 @@ struct BibleServiceConfig: Identifiable, Hashable {
         if holynetGaeYeogGaeJeong { languages.append(.gae) }
         return languages
     }
+
+    // 傳給 CLI 的啟用來源 token，對照 advanced_bible_query_cli.rb / generate_keynote_cli.rb 的 token_sources
+    var enabledTokens: String {
+        var tokens: [String] = []
+        if fhl { tokens.append("fhl") }
+        if biblegatewayNiv { tokens.append("niv") }
+        if biblegatewayNkjv { tokens.append("nkjv") }
+        if biblegatewayKjv { tokens.append("kjv") }
+        if holynetGaeYeogGaeJeong { tokens.append("gae") }
+        return tokens.joined(separator: ",")
+    }
 }
 
 struct BibleSearchResult: Identifiable {
@@ -47,10 +58,6 @@ struct AdvancedBibleQueryView: View {
     @State var bibleServiceConfig            = BibleServiceConfig.appDefault
     @State var isCommonFormatPopupDisplaying = false
 
-    @State var placeholders: [KeynotePlaceholder] = [
-        KeynotePlaceholder(placeholder: "中", format: "{中}")
-    ]
-
     @State var status    = ""
     @State var isRunning = false
 
@@ -66,25 +73,14 @@ struct AdvancedBibleQueryView: View {
         .deletingLastPathComponent()
         .deletingLastPathComponent()
 
-    // 勾選框決定要傳給 CLI 哪些啟用的來源 token，對照 advanced_bible_query_cli.rb 的 token_sources
-    func enabledSourceTokens() -> String {
-        var tokens: [String] = []
-        if bibleServiceConfig.fhl { tokens.append("fhl") }
-        if bibleServiceConfig.biblegatewayNiv { tokens.append("niv") }
-        if bibleServiceConfig.biblegatewayNkjv { tokens.append("nkjv") }
-        if bibleServiceConfig.biblegatewayKjv { tokens.append("kjv") }
-        if bibleServiceConfig.holynetGaeYeogGaeJeong { tokens.append("gae") }
-        return tokens.joined(separator: ",")
-    }
-
-    // 查詢只負責把經文貼進預覽；#region/{token} 範本代換留到「產生 Keynote」那一步再處理，
-    // 所以這裡不會用到 placeholders 表格的內容
+    // 查詢負責把經文貼進預覽；#region/{token} 範本代換留到「產生 Keynote」那一步再處理，
+    // placeholders 表格不跟著查詢結果走，放在 resultStore 共用（見 BibleSearchResultStore）
     func runQuery() {
         guard !isRunning else { return }
         isRunning = true
         status = "查詢中..."
         let rawText = searchDsl
-        let enabledTokens = enabledSourceTokens()
+        let enabledTokens = bibleServiceConfig.enabledTokens
         let config = bibleServiceConfig
 
         Task.detached { [scriptDir] in
@@ -181,38 +177,38 @@ struct AdvancedBibleQueryView: View {
             }
             .padding()
         } detail: {
-            Table(placeholders) {
+            Table(resultStore.placeholders) {
                 TableColumn("") { item in
                     HStack(alignment: .center, spacing: 16) {
                         Button {
-                            guard placeholders.count > 1 else { return }
-                            placeholders.removeAll(where: { $0.id == item.id })
+                            guard resultStore.placeholders.count > 1 else { return }
+                            resultStore.placeholders.removeAll(where: { $0.id == item.id })
                         } label: {
                             Image(systemName: "trash")
                         }.foregroundColor(.red).buttonStyle(.borderless)
-                        
+
                         Button {
                             let newItem = KeynotePlaceholder(
                                 placeholder: "String", format: "String")
-                            guard let idx = placeholders.firstIndex(where: { $0.id == item.id })
+                            guard let idx = resultStore.placeholders.firstIndex(where: { $0.id == item.id })
                             else {
-                                placeholders.append(newItem)
+                                resultStore.placeholders.append(newItem)
                                 return
                             }
-                            placeholders.insert(newItem, at: idx + 1)
+                            resultStore.placeholders.insert(newItem, at: idx + 1)
                         } label: {
                             Image(systemName: "plus")
                         }.foregroundColor(.green).buttonStyle(.borderless)
                     }
                 }.width(60)
-                
+
                 TableColumn("佔位符") { item in
-                    TextField("佔位符", text: binding($placeholders, id: item.id, \.placeholder))
+                    TextField("佔位符", text: binding($resultStore.placeholders, id: item.id, \.placeholder))
                         .textFieldStyle(.roundedBorder)
                 }
-                
+
                 TableColumn("格式") { item in
-                    TextField("格式", text: binding($placeholders, id: item.id, \.format))
+                    TextField("格式", text: binding($resultStore.placeholders, id: item.id, \.format))
                         .textFieldStyle(.roundedBorder)
                 }
             }
@@ -227,7 +223,7 @@ struct AdvancedBibleQueryView: View {
                         Text("動畫").font(.caption).foregroundStyle(.secondary)
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 64))]) {
                             Button {
-                                placeholders = KeynotePlaceholder.preset(
+                                resultStore.placeholders = KeynotePlaceholder.preset(
                                     languages: bibleServiceConfig.selectedLanguages,
                                     layout: .allMerged
                                 )
@@ -239,7 +235,7 @@ struct AdvancedBibleQueryView: View {
                         Text("字幕").font(.caption).foregroundStyle(.secondary)
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 64))]) {
                             Button {
-                                placeholders = KeynotePlaceholder.preset(
+                                resultStore.placeholders = KeynotePlaceholder.preset(
                                     languages: bibleServiceConfig.selectedLanguages,
                                     layout: .bookMergedRangeSeparate
                                 )
@@ -247,7 +243,7 @@ struct AdvancedBibleQueryView: View {
                                 Text("書合")
                             }
                             Button {
-                                placeholders = KeynotePlaceholder.preset(
+                                resultStore.placeholders = KeynotePlaceholder.preset(
                                     languages: bibleServiceConfig.selectedLanguages,
                                     layout: .bookSplitRangeSeparate
                                 )
@@ -276,8 +272,9 @@ struct AdvancedBibleQueryView: View {
 }
 
 // 原生 .alert 在 macOS 上文字沒辦法選取複製，逾時這種要貼給別人看的錯誤，
-// 用可以整段選取/複製的 sheet 取代單純顯示用的 alert
-private struct ErrorDetailView: View {
+// 用可以整段選取/複製的 sheet 取代單純顯示用的 alert。
+// 不是 private：BibleSearchResultView 的「產生 Keynote」錯誤也共用這個元件
+struct ErrorDetailView: View {
     var detail: String
     @Binding var isPresented: Bool
 

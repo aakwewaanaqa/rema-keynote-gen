@@ -35,24 +35,28 @@ struct QueryError: Error {
     }
 }
 
+// 從 Xcode Build & Run 啟動的 process，PATH 裡沒有 ~/.rbenv/shims，
+// `env ruby` 會掉回 macOS 內建的系統 Ruby（版本很舊、跟 rbenv 管理的版本行為不一致），
+// 所以直接指到 rbenv shim，不要依賴 PATH 去猜是哪個 ruby
+private func configureRubyProcess(_ process: Process, scriptPath: String, arguments: [String]) {
+    let rbenvRuby = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".rbenv/shims/ruby")
+    if FileManager.default.isExecutableFile(atPath: rbenvRuby.path) {
+        process.executableURL = rbenvRuby
+        process.arguments = [scriptPath] + arguments
+    } else {
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["ruby", scriptPath] + arguments
+    }
+}
+
 func runBibleQueryCLI(scriptDir: URL, rawText: String, enabledTokens: String)
     -> Result<(String, [QueriedVerseGroup]), QueryError>
 {
     let cliPath = scriptDir.appendingPathComponent("advanced_bible_query_cli.rb")
 
     let process = Process()
-    // 從 Xcode Build & Run 啟動的 process，PATH 裡沒有 ~/.rbenv/shims，
-    // `env ruby` 會掉回 macOS 內建的系統 Ruby（版本很舊、跟 rbenv 管理的版本行為不一致），
-    // 所以直接指到 rbenv shim，不要依賴 PATH 去猜是哪個 ruby
-    let rbenvRuby = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".rbenv/shims/ruby")
-    if FileManager.default.isExecutableFile(atPath: rbenvRuby.path) {
-        process.executableURL = rbenvRuby
-        process.arguments = [cliPath.path, rawText, enabledTokens]
-    } else {
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["ruby", cliPath.path, rawText, enabledTokens]
-    }
+    configureRubyProcess(process, scriptPath: cliPath.path, arguments: [rawText, enabledTokens])
 
     let stdout = Pipe()
     let stderr = Pipe()
@@ -81,4 +85,86 @@ func runBibleQueryCLI(scriptDir: URL, rawText: String, enabledTokens: String)
         return .failure(QueryError(message: error, detail: stderrText))
     }
     return .success((decoded.status ?? "", decoded.verses ?? []))
+}
+
+private struct KeynotePlaceholderPayload: Encodable {
+    var placeholder: String
+    var format: String
+}
+
+struct GenerateKeynoteError: Error {
+    let message: String
+    let detail: String?
+
+    init(message: String, detail: String? = nil) {
+        self.message = message
+        self.detail = detail
+    }
+}
+
+private struct GenerateKeynoteResult: Decodable {
+    let status: String?
+    let outputDir: String?
+    let errors: [String]?
+    let error: String?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case outputDir = "output_dir"
+        case errors
+        case error
+    }
+}
+
+// 對照 generate_keynote_cli.rb：查經文 -> 依 placeholders 範本代換 -> KeynoteRunner(osascript) 套進範本輸出投影片。
+// 跟查詢本身分開一支 CLI，因為這一步真的會動 Keynote App（開檔、加投影片、匯出、關檔），
+// 觸發時機（按下「產生 Keynote」）跟查詢預覽（按下「查詢」）不一樣。
+func runGenerateKeynoteCLI(
+    scriptDir: URL,
+    rawText: String,
+    enabledTokens: String,
+    templatePath: String,
+    outputDir: String,
+    placeholders: [KeynotePlaceholder]
+) -> Result<(String, String?, [String]), GenerateKeynoteError> {
+    let cliPath = scriptDir.appendingPathComponent("generate_keynote_cli.rb")
+
+    let payload = placeholders.map { KeynotePlaceholderPayload(placeholder: $0.placeholder, format: $0.format) }
+    guard let placeholdersData = try? JSONEncoder().encode(payload),
+          let placeholdersJSON = String(data: placeholdersData, encoding: .utf8)
+    else {
+        return .failure(GenerateKeynoteError(message: "無法編碼 placeholder 資料"))
+    }
+
+    let process = Process()
+    configureRubyProcess(
+        process,
+        scriptPath: cliPath.path,
+        arguments: [rawText, enabledTokens, templatePath, outputDir, placeholdersJSON]
+    )
+
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+
+    do {
+        try process.run()
+    } catch {
+        return .failure(GenerateKeynoteError(message: "無法啟動 ruby: \(error.localizedDescription)"))
+    }
+    process.waitUntilExit()
+
+    let data = stdout.fileHandleForReading.readDataToEndOfFile()
+    let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+
+    guard let decoded = try? JSONDecoder().decode(GenerateKeynoteResult.self, from: data) else {
+        let rawOutput = String(data: data, encoding: .utf8) ?? ""
+        let detail = [stderrText, rawOutput].filter { !$0.isEmpty }.joined(separator: "\n")
+        return .failure(GenerateKeynoteError(message: "無法解析輸出" + (detail.isEmpty ? "" : ": \(detail)"), detail: detail))
+    }
+    if let error = decoded.error {
+        return .failure(GenerateKeynoteError(message: error, detail: stderrText))
+    }
+    return .success((decoded.status ?? "", decoded.outputDir, decoded.errors ?? []))
 }
