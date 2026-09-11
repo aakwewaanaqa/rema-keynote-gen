@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# 給 AppKit 端呼叫的 CLI 包裝，對應 bin/ui/windows/advanced_bible_query_window.rb 的 run_query 邏輯。
+# 給 AppKit 端呼叫的 CLI 包裝，執行進階查經文的 run_query 邏輯。
 # 這裡只負責查經文，直接輸出結構化的節資料給 Swift 端存成 QueriedVerseGroup 陣列——
 # #region/{token} 範本代換是「產生 Keynote」那一步的事，跟查詢分開。
 # 來源不是自動掃描出來的，是由第二個參數明講要查哪些來源（對應 SwiftUI 那邊的服務勾選框）。
