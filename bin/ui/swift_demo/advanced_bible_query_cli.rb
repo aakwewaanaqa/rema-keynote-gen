@@ -43,6 +43,7 @@ token_sources = [
   ['niv',   Service::BibleGatewayService],
   ['gae',   Service::HolyBibleKoreanService],
   ['nkjv',  Service::BibleGatewayServiceNKJV],
+  ['kjv',   Service::BibleGatewayServiceKJV],
 ]
 
 translations = {
@@ -51,6 +52,7 @@ translations = {
   'niv'   => 'NIV',
   'gae'   => '개역개정',
   'nkjv'  => 'NKJV',
+  'kjv'   => 'KJV',
 }
 
 # 書卷名要跟著該譯本的語言變，不是每個譯本都硬塞中文書名
@@ -60,6 +62,7 @@ book_name_keys = {
   'niv'   => :english,
   'gae'   => :korean,
   'nkjv'  => :english,
+  'kjv'   => :english,
 }
 
 enabled_tokens = enabled_text.split(',').map(&:strip).reject(&:empty?)
@@ -80,7 +83,7 @@ rescue => e
 end
 
 if outcome[:error]
-  puts JSON.generate({ status: "查詢失敗: #{outcome[:error]}", verses: [] })
+  puts JSON.generate({ status: "查詢失敗: #{outcome[:error]}", verses: [], error: outcome[:error] })
   exit
 end
 

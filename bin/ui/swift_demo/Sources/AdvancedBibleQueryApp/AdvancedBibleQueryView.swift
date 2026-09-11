@@ -1,19 +1,33 @@
 import SwiftUI
+import AppKit
 
 struct BibleServiceConfig: Identifiable, Hashable {
     var id = UUID()
     var fhl: Bool
     var biblegatewayNiv: Bool
     var biblegatewayNkjv: Bool
+    var biblegatewayKjv: Bool
     var holynetGaeYeogGaeJeong: Bool
-    
+
     public static var appDefault: BibleServiceConfig {
         BibleServiceConfig(
             fhl: true,
             biblegatewayNiv: true,
             biblegatewayNkjv: false,
+            biblegatewayKjv: false,
             holynetGaeYeogGaeJeong: false
         )
+    }
+
+    // hare 選單要塞哪些語言的 token，直接對照目前勾選的來源，每個語言互不影響。
+    var selectedLanguages: [TranslationLanguage] {
+        var languages: [TranslationLanguage] = []
+        if fhl { languages.append(.cuv) }
+        if biblegatewayNiv { languages.append(.niv) }
+        if biblegatewayNkjv { languages.append(.nkjv) }
+        if biblegatewayKjv { languages.append(.kjv) }
+        if holynetGaeYeogGaeJeong { languages.append(.gae) }
+        return languages
     }
 }
 
@@ -28,9 +42,10 @@ struct AdvancedBibleQueryView: View {
     @EnvironmentObject var resultStore: BibleSearchResultStore
     @Environment(\.openWindow) private var openWindow
 
-    @State var searchDsl                 = ""
-    @State var isSearchConfirmDisplaying = false
-    @State var bibleServiceConfig        = BibleServiceConfig.appDefault
+    @State var searchDsl                     = ""
+    @State var isSearchConfirmDisplaying     = false
+    @State var bibleServiceConfig            = BibleServiceConfig.appDefault
+    @State var isCommonFormatPopupDisplaying = false
 
     @State var placeholders: [KeynotePlaceholder] = [
         KeynotePlaceholder(placeholder: "中", format: "{中}")
@@ -38,6 +53,11 @@ struct AdvancedBibleQueryView: View {
 
     @State var status    = ""
     @State var isRunning = false
+
+    // 查詢失敗時把完整錯誤訊息（含 CLI 的 stderr 診斷內容）存起來，用彈窗顯示方便複製，
+    // 不然逾時這種情況光看 status 那行文字根本看不出卡在哪一步
+    @State var errorDetail: String?
+    @State var isErrorDetailDisplaying = false
 
     // #filePath 是 Sources/AdvancedBibleQueryApp/AdvancedBibleQueryView.swift，
     // 要往上三層（檔名 -> target 目錄 -> Sources 目錄）才會回到 advanced_bible_query_cli.rb 所在的 swift_demo 目錄
@@ -52,6 +72,7 @@ struct AdvancedBibleQueryView: View {
         if bibleServiceConfig.fhl { tokens.append("fhl") }
         if bibleServiceConfig.biblegatewayNiv { tokens.append("niv") }
         if bibleServiceConfig.biblegatewayNkjv { tokens.append("nkjv") }
+        if bibleServiceConfig.biblegatewayKjv { tokens.append("kjv") }
         if bibleServiceConfig.holynetGaeYeogGaeJeong { tokens.append("gae") }
         return tokens.joined(separator: ",")
     }
@@ -77,6 +98,9 @@ struct AdvancedBibleQueryView: View {
                         BibleSearchResult(searchDsl: rawText, config: config, verses: verses))
                 case .failure(let error):
                     self.status = "查詢失敗: \(error.message)"
+                    let detail = [error.message, error.detail].compactMap { $0 }.filter { !$0.isEmpty }
+                    self.errorDetail = detail.joined(separator: "\n\n---\n\n")
+                    self.isErrorDetailDisplaying = true
                 }
             }
         }
@@ -122,12 +146,14 @@ struct AdvancedBibleQueryView: View {
                 Toggle(isOn: $bibleServiceConfig.biblegatewayNkjv) {
                     Text("NKJV")
                 }
+                Toggle(isOn: $bibleServiceConfig.biblegatewayKjv) {
+                    Text("KJV")
+                }
                 Toggle(isOn: $bibleServiceConfig.holynetGaeYeogGaeJeong) {
                     Text("개역개겅")
                 }
 
                 Divider()
-                    .padding(.vertical, 4)
 
                 ProgressView(value: isRunning ? nil : 0)
                     .opacity(isRunning ? 1 : 0)
@@ -157,16 +183,14 @@ struct AdvancedBibleQueryView: View {
         } detail: {
             Table(placeholders) {
                 TableColumn("") { item in
-                    HStack {
+                    HStack(alignment: .center, spacing: 16) {
                         Button {
                             guard placeholders.count > 1 else { return }
                             placeholders.removeAll(where: { $0.id == item.id })
                         } label: {
                             Image(systemName: "trash")
-                        }
-                        .foregroundColor(.red)
-                        .buttonStyle(.bordered)
-
+                        }.foregroundColor(.red).buttonStyle(.borderless)
+                        
                         Button {
                             let newItem = KeynotePlaceholder(
                                 placeholder: "String", format: "String")
@@ -178,22 +202,62 @@ struct AdvancedBibleQueryView: View {
                             placeholders.insert(newItem, at: idx + 1)
                         } label: {
                             Image(systemName: "plus")
-                        }
-                        .foregroundColor(.green)
-                        .buttonStyle(.bordered)
+                        }.foregroundColor(.green).buttonStyle(.borderless)
                     }
                 }.width(60)
-
+                
                 TableColumn("佔位符") { item in
                     TextField("佔位符", text: binding($placeholders, id: item.id, \.placeholder))
                         .textFieldStyle(.roundedBorder)
                 }
-
+                
                 TableColumn("格式") { item in
                     TextField("格式", text: binding($placeholders, id: item.id, \.format))
                         .textFieldStyle(.roundedBorder)
                 }
             }
+            Divider()
+            VStack(alignment: .leading) {
+                Button {
+                    isCommonFormatPopupDisplaying = true
+                } label: {
+                    Image(systemName: "hare")
+                }.popover(isPresented: $isCommonFormatPopupDisplaying) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("動畫").font(.caption).foregroundStyle(.secondary)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 64))]) {
+                            Button {
+                                placeholders = KeynotePlaceholder.preset(
+                                    languages: bibleServiceConfig.selectedLanguages,
+                                    layout: .allMerged
+                                )
+                            } label: {
+                                Text("全合")
+                            }
+                        }
+                        Divider()
+                        Text("字幕").font(.caption).foregroundStyle(.secondary)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 64))]) {
+                            Button {
+                                placeholders = KeynotePlaceholder.preset(
+                                    languages: bibleServiceConfig.selectedLanguages,
+                                    layout: .bookMergedRangeSeparate
+                                )
+                            } label: {
+                                Text("書合")
+                            }
+                            Button {
+                                placeholders = KeynotePlaceholder.preset(
+                                    languages: bibleServiceConfig.selectedLanguages,
+                                    layout: .bookSplitRangeSeparate
+                                )
+                            } label: {
+                                Text("書分")
+                            }
+                        }
+                    }.padding(.all, 16).frame(width: 250)
+                }
+            }.padding(.all, 8)
         }
         .searchable(text: $searchDsl, prompt: "找聖經")
         .onSubmit(of: .search) {
@@ -205,5 +269,39 @@ struct AdvancedBibleQueryView: View {
         } message: {
             Text(searchDsl)
         }
+        .sheet(isPresented: $isErrorDetailDisplaying) {
+            ErrorDetailView(detail: errorDetail ?? "", isPresented: $isErrorDetailDisplaying)
+        }
+    }
+}
+
+// 原生 .alert 在 macOS 上文字沒辦法選取複製，逾時這種要貼給別人看的錯誤，
+// 用可以整段選取/複製的 sheet 取代單純顯示用的 alert
+private struct ErrorDetailView: View {
+    var detail: String
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("查詢失敗").font(.headline)
+            ScrollView {
+                Text(detail)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(minWidth: 480, minHeight: 240)
+            HStack {
+                Spacer()
+                Button("複製") {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(detail, forType: .string)
+                }
+                Button("關閉") { isPresented = false }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
     }
 }

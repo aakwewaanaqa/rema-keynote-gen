@@ -73,4 +73,11 @@ module Service
       BibleGatewayService.query(query_ast, version: 'NKJV')
     end
   end
+
+  # 跟 BibleGatewayService 共用同一支爬蟲，只是換一個 version 參數（KJV）
+  class BibleGatewayServiceKJV
+    def self.query(query_ast)
+      BibleGatewayService.query(query_ast, version: 'KJV')
+    end
+  end
 end

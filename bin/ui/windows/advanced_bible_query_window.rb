@@ -8,6 +8,8 @@ def advanced_bible_query_window
     ['fhl',   Service::SpringBibleService],
     ['niv',   Service::BibleGatewayService],
     ['gae',   Service::HolyBibleKoreanService],
+    ['nkjv',  Service::BibleGatewayServiceNKJV],
+    ['kjv',   Service::BibleGatewayServiceKJV],
   ]
 
   search_field = nil
@@ -45,7 +47,11 @@ def advanced_bible_query_window
       next
     end
 
-    used_tokens = sections.flat_map { |_, body| body.scan(/\{(\w+)\}/).flatten }.uniq
+    # 別名（{中}/{章}/{節}...）要代換回實際 token 才能跟 token_sources 比對，
+    # 而且 \w 不吃中文字，這裡跟 render_placeholder 一樣用「不是大括號的任何字元」抓 token 名稱
+    used_tokens = sections.flat_map { |_, body| body.scan(/\{([^{}]+)\}/).flatten }
+      .map { |t| Domain::BibleTemplate.canonical_token(t) }
+      .uniq
     sources = token_sources.map { |token, service| [used_tokens.include?(token), service] }
 
     if sources.none? { |enabled, _| enabled }

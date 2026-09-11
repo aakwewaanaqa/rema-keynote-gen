@@ -41,11 +41,27 @@ class TestAdvancedBibleQueryCli < Minitest::Test
     verses = parsed['verses']
     assert_equal 1, verses.length
     verse = verses[0]
-    assert_equal 'local', verse['service']
-    assert_equal '創世記', verse['book']
     assert_equal 1, verse['chapter']
     assert_equal 1, verse['verse']
-    assert_equal '起初，神創造天地。', verse['content']
+
+    translations = verse['translations']
+    assert_equal 1, translations.length
+    translation = translations[0]
+    assert_equal 'local', translation['service']
+    assert_equal '創世記', translation['book']
+    assert_equal '起初，神創造天地。', translation['content']
+  end
+
+  # 書卷名要跟著譯本語言變：中文譯本顯示中文書名，NIV 顯示英文書名，同一節底下兩個譯本共用同一個
+  # chapter/verse，但各自的 book 不同
+  def test_book_name_follows_translation_language
+    parsed = parsed_stdout('徒6:1', 'fhl,niv')
+    verse = parsed['verses'][0]
+
+    fhl = verse['translations'].find { |t| t['service'] == 'fhl' }
+    niv = verse['translations'].find { |t| t['service'] == 'niv' }
+    assert_equal '使徒行傳', fhl['book']
+    assert_equal 'Acts', niv['book']
   end
 
   def test_verse_range_returns_multiple_entries

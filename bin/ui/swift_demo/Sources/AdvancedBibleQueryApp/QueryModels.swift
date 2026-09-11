@@ -26,12 +26,13 @@ struct QueryResult: Decodable {
 
 struct QueryError: Error {
     let message: String
-}
+    // CLI 側 warn 印出的診斷內容（例如 SpringBibleService 重試紀錄），拿去給彈窗複製用
+    let detail: String?
 
-struct KeynotePlaceholder: Identifiable, Hashable {
-    var id: UUID = UUID()
-    var placeholder: String
-    var format: String
+    init(message: String, detail: String? = nil) {
+        self.message = message
+        self.detail = detail
+    }
 }
 
 func runBibleQueryCLI(scriptDir: URL, rawText: String, enabledTokens: String)
@@ -40,8 +41,18 @@ func runBibleQueryCLI(scriptDir: URL, rawText: String, enabledTokens: String)
     let cliPath = scriptDir.appendingPathComponent("advanced_bible_query_cli.rb")
 
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["ruby", cliPath.path, rawText, enabledTokens]
+    // 從 Xcode Build & Run 啟動的 process，PATH 裡沒有 ~/.rbenv/shims，
+    // `env ruby` 會掉回 macOS 內建的系統 Ruby（版本很舊、跟 rbenv 管理的版本行為不一致），
+    // 所以直接指到 rbenv shim，不要依賴 PATH 去猜是哪個 ruby
+    let rbenvRuby = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".rbenv/shims/ruby")
+    if FileManager.default.isExecutableFile(atPath: rbenvRuby.path) {
+        process.executableURL = rbenvRuby
+        process.arguments = [cliPath.path, rawText, enabledTokens]
+    } else {
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["ruby", cliPath.path, rawText, enabledTokens]
+    }
 
     let stdout = Pipe()
     let stderr = Pipe()
@@ -56,14 +67,18 @@ func runBibleQueryCLI(scriptDir: URL, rawText: String, enabledTokens: String)
     process.waitUntilExit()
 
     let data = stdout.fileHandleForReading.readDataToEndOfFile()
+    // 不管成功或失敗都先讀出來：CLI 內部的 warn（例如 SpringBibleService 重試紀錄）都是走這條
+    // stderr pipe，只有在真的解析失敗時才印出來的話，逾時之類「stdout 仍是合法 JSON」的情境
+    // 就會把這些診斷資訊直接丟掉，Xcode Console 也看不到（因為被導去這個 Pipe 而不是繼承的 stderr）
+    let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+
     guard let decoded = try? JSONDecoder().decode(QueryResult.self, from: data) else {
-        let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let rawOutput = String(data: data, encoding: .utf8) ?? ""
         let detail = [stderrText, rawOutput].filter { !$0.isEmpty }.joined(separator: "\n")
-        return .failure(QueryError(message: "無法解析輸出" + (detail.isEmpty ? "" : ": \(detail)")))
+        return .failure(QueryError(message: "無法解析輸出" + (detail.isEmpty ? "" : ": \(detail)"), detail: detail))
     }
     if let error = decoded.error {
-        return .failure(QueryError(message: error))
+        return .failure(QueryError(message: error, detail: stderrText))
     }
     return .success((decoded.status ?? "", decoded.verses ?? []))
 }
