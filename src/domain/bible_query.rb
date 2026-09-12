@@ -10,12 +10,19 @@ module Domain
       # 同一節經文，各語言來源合併成同一筆，而不是各自分開列出；
       # key 用 [book, chapter, verse] 而不是只用 verse，避免查詢橫跨多卷書時節號互相覆蓋
       grouped = Hash.new { |h, k| h[k] = Array.new(sources.size, '') }
+      source_errors = []
 
       sources.each_with_index do |(enabled, service), idx|
         next unless enabled
 
-        service.query(ast).each do |v|
-          grouped[[v.book, v.chapter, v.verse]][idx] = v.text
+        # 個別來源掛掉（例如外部網站故障）不該讓其他已勾選的來源也查不到，
+        # 所以這裡只跳過該來源，錯誤收集起來回報，不往外 raise
+        begin
+          service.query(ast).each do |v|
+            grouped[[v.book, v.chapter, v.verse]][idx] = v.text
+          end
+        rescue => e
+          source_errors << "#{service.name}: #{e.message}"
         end
       end
 
@@ -32,7 +39,7 @@ module Domain
         non_empty.each_with_index.map { |text, i| [i.zero? ? label : '', text] }
       }
 
-      { rows: rows, entries: entries }
+      { rows: rows, entries: entries, source_errors: source_errors }
     end
   end
 end

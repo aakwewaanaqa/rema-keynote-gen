@@ -22,6 +22,14 @@ struct QueryResult: Decodable {
     let status: String?
     let verses: [QueriedVerseGroup]?
     let error: String?
+    // 個別查詢來源掛掉（例如某聖經網站故障）的錯誤訊息，跟整體查詢成功與否無關——
+    // 就算這個陣列不是空的，status/verses 仍然是其他來源正常查到的結果
+    let sourceErrors: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case status, verses, error
+        case sourceErrors = "source_errors"
+    }
 }
 
 struct QueryError: Error {
@@ -51,7 +59,7 @@ private func configureRubyProcess(_ process: Process, scriptPath: String, argume
 }
 
 func runBibleQueryCLI(scriptDir: URL, rawText: String, enabledTokens: String)
-    -> Result<(String, [QueriedVerseGroup]), QueryError>
+    -> Result<(String, [QueriedVerseGroup], [String]), QueryError>
 {
     let cliPath = scriptDir.appendingPathComponent("advanced_bible_query_cli.rb")
 
@@ -84,7 +92,7 @@ func runBibleQueryCLI(scriptDir: URL, rawText: String, enabledTokens: String)
     if let error = decoded.error {
         return .failure(QueryError(message: error, detail: stderrText))
     }
-    return .success((decoded.status ?? "", decoded.verses ?? []))
+    return .success((decoded.status ?? "", decoded.verses ?? [], decoded.sourceErrors ?? []))
 }
 
 private struct KeynotePlaceholderPayload: Encodable {

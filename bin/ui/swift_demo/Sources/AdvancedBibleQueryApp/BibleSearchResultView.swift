@@ -75,10 +75,12 @@ struct BibleSearchResultView: View {
         .sheet(isPresented: $isGenerateErrorDisplaying) {
             ErrorDetailView(detail: generateErrorDetail ?? "", isPresented: $isGenerateErrorDisplaying)
         }
-        .alert("Keynote 已產生", isPresented: $isGenerateSuccessDisplaying) {
-            Button("好") {}
-        } message: {
-            Text(generateSuccessMessage)
+        .sheet(isPresented: $isGenerateSuccessDisplaying) {
+            ErrorDetailView(
+                title: "Keynote 已產生",
+                detail: generateSuccessMessage,
+                isPresented: $isGenerateSuccessDisplaying
+            )
         }
     }
 

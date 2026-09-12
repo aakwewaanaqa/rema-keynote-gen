@@ -117,4 +117,7 @@ verses = outcome[:entries].map { |e|
 
 status = "共 #{outcome[:entries].size} 節，已取得經文"
 
-puts JSON.generate({ status: status, verses: verses })
+# source_errors 是各查詢來源自己掛掉的錯誤（例如某個聖經網站故障），跟 status 分開回傳，
+# 不要塞進 status 那行短字串——這種診斷內容可能很長，Swift 端要用可捲動/可複製的彈窗顯示，
+# 不是塞進一行 caption 文字
+puts JSON.generate({ status: status, verses: verses, source_errors: outcome[:source_errors] })

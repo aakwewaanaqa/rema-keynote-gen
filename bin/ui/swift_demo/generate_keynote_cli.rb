@@ -97,7 +97,7 @@ end
 fail_with(outcome[:error]) if outcome[:error]
 fail_with("查無經文") if outcome[:entries].empty?
 
-errors = []
+errors = outcome[:source_errors].dup
 slide_groups = outcome[:entries].map { |entry|
   placeholders.map { |ph| Domain::BibleTemplate.render_placeholder(ph['format'].to_s, entry, errors, ph['placeholder'].to_s) }
 }

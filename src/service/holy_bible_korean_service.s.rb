@@ -28,7 +28,15 @@ module Service
 
       # 每段經文包在 <ol start="NNN" id="b_NNN"> 裡，節號沒有另外標示，
       # 是用 ol 的 start 屬性加上 li 在裡面的順序推算出來的
-      doc.css('ol[id^="b_"]').flat_map do |ol|
+      ols = doc.css('ol[id^="b_"]')
+
+      # holybible.or.kr 最近常常自己內部 include 經文用的 bibl_ftxt.php 失敗
+      # （回應裡會夾雜 "Connection refused"），外層頁面照樣回 200，
+      # 但完全沒有 <ol id="b_..."> 經文區塊——這種情況不要默默回傳空陣列，
+      # 不然呼叫端只會覺得「這節沒有韓文翻譯」，看不出是原站掛了
+      raise "holybible.or.kr 韓文來源目前無法取得經文（原站可能故障）" if ols.empty?
+
+      ols.flat_map do |ol|
         start = ol['start'].to_i
         ol.css('li').each_with_index.map do |li, i|
           ::Service::BibleQueryVerse.new(book_code, chapter, start + i, li.text.strip)

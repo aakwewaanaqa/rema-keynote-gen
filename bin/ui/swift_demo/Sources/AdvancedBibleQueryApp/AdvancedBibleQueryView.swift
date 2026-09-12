@@ -66,6 +66,12 @@ struct AdvancedBibleQueryView: View {
     @State var errorDetail: String?
     @State var isErrorDetailDisplaying = false
 
+    // 查詢「成功」但個別來源掛掉（例如某聖經網站故障）的警告，跟上面的失敗彈窗共用
+    // ErrorDetailView，只是換個標題——這種訊息使用者常常要整段複製貼給我回報狀況，
+    // 塞進 status 那行 caption 太短會被截斷，且不能選取文字
+    @State var sourceErrorDetail: String?
+    @State var isSourceErrorDetailDisplaying = false
+
     // #filePath 是 Sources/AdvancedBibleQueryApp/AdvancedBibleQueryView.swift，
     // 要往上三層（檔名 -> target 目錄 -> Sources 目錄）才會回到 advanced_bible_query_cli.rb 所在的 swift_demo 目錄
     private let scriptDir = URL(fileURLWithPath: #filePath)
@@ -88,10 +94,14 @@ struct AdvancedBibleQueryView: View {
             await MainActor.run {
                 self.isRunning = false
                 switch result {
-                case .success(let (status, verses)):
+                case .success(let (status, verses, sourceErrors)):
                     self.status = status
                     self.resultStore.results.append(
                         BibleSearchResult(searchDsl: rawText, config: config, verses: verses))
+                    if !sourceErrors.isEmpty {
+                        self.sourceErrorDetail = sourceErrors.joined(separator: "\n\n---\n\n")
+                        self.isSourceErrorDetailDisplaying = true
+                    }
                 case .failure(let error):
                     self.status = "查詢失敗: \(error.message)"
                     let detail = [error.message, error.detail].compactMap { $0 }.filter { !$0.isEmpty }
@@ -268,19 +278,27 @@ struct AdvancedBibleQueryView: View {
         .sheet(isPresented: $isErrorDetailDisplaying) {
             ErrorDetailView(detail: errorDetail ?? "", isPresented: $isErrorDetailDisplaying)
         }
+        .sheet(isPresented: $isSourceErrorDetailDisplaying) {
+            ErrorDetailView(
+                title: "查詢完成，但有來源出狀況",
+                detail: sourceErrorDetail ?? "",
+                isPresented: $isSourceErrorDetailDisplaying
+            )
+        }
     }
 }
 
-// 原生 .alert 在 macOS 上文字沒辦法選取複製，逾時這種要貼給別人看的錯誤，
-// 用可以整段選取/複製的 sheet 取代單純顯示用的 alert。
-// 不是 private：BibleSearchResultView 的「產生 Keynote」錯誤也共用這個元件
+// 原生 .alert 在 macOS 上文字沒辦法選取複製，逾時、來源網站故障這種要貼給別人看的訊息，
+// 用可以整段選取/複製的 sheet 取代單純顯示用的 alert。title 可以套失敗也可以套「成功但有警告」，
+// 不是 private：BibleSearchResultView 的「產生 Keynote」錯誤/警告也共用這個元件
 struct ErrorDetailView: View {
+    var title: String = "查詢失敗"
     var detail: String
     @Binding var isPresented: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("查詢失敗").font(.headline)
+            Text(title).font(.headline)
             ScrollView {
                 Text(detail)
                     .font(.system(.body, design: .monospaced))
