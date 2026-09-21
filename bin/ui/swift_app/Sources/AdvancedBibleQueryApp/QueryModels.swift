@@ -3,7 +3,7 @@ import Foundation
 // 同一節經文、單一譯本的內容。service 是來源 token（fhl/niv/nkjv/gae/local），
 // translation 是給人看的來源名稱（信望愛 CUV/NIV/...）。book 會跟著這個譯本的語言變
 // （中文譯本顯示中文書名、NIV/NKJV 顯示英文書名、개역개정 顯示韓文書名），所以放在這裡而不是外層。
-struct VerseTranslation: Decodable, Hashable {
+struct VerseTranslation: Codable, Hashable {
     var service: String
     var translation: String
     var book: String
@@ -12,7 +12,7 @@ struct VerseTranslation: Decodable, Hashable {
 
 // 同一節經文，底下疊多個譯本——對照 advanced_bible_query_cli.rb 輸出的 verses 陣列，
 // 一節一個 item，不是一節×一譯本一個 item
-struct QueriedVerseGroup: Decodable, Hashable {
+struct QueriedVerseGroup: Codable, Hashable {
     var chapter: Int
     var verse: Int
     var translations: [VerseTranslation]
@@ -43,6 +43,10 @@ struct QueryError: Error {
     }
 }
 
+// 使用者按「取消」時丟出的錯誤，跟真正查詢失敗分開判斷，
+// 這樣 UI 才知道不用彈錯誤詳情視窗，只要把狀態列切成「已取消查詢」就好
+struct QueryCancelledError: Error {}
+
 // 從 Xcode Build & Run 啟動的 process，PATH 裡沒有 ~/.rbenv/shims，
 // `env ruby` 會掉回 macOS 內建的系統 Ruby（版本很舊、跟 rbenv 管理的版本行為不一致），
 // 所以直接指到 rbenv shim，不要依賴 PATH 去猜是哪個 ruby
@@ -58,41 +62,105 @@ private func configureRubyProcess(_ process: Process, scriptPath: String, argume
     }
 }
 
-func runBibleQueryCLI(scriptDir: URL, rawText: String, enabledTokens: String)
-    -> Result<(String, [QueriedVerseGroup], [String]), QueryError>
-{
-    let cliPath = scriptDir.appendingPathComponent("advanced_bible_query_cli.rb")
+// 跑 advanced_bible_query_cli.rb 的查詢任務，跟舊版 runBibleQueryCLI（單純同步等到底）不一樣的地方：
+// 這支能被使用者按下「取消」時真的把底層的 ruby process 終止掉，不是單純放著不管結果。
+//
+// stdout/stderr 都用 readabilityHandler 非同步邊產生邊讀，而不是等 waitUntilExit() 後才一次讀完——
+// 一次讀完是舊版的做法，查詢結果的 JSON 只要大一點（塞爆 pipe 緩衝區）就有機會卡死：
+// 子行程寫 stdout 寫到緩衝區滿了會被系統擋住，但我們這邊還在等它先結束才要讀，雙方互等。
+// 所有共用的可變狀態（緩衝區、是否取消）都只能在 ioQueue 這條序列 queue 上動，
+// 避免兩個 pipe 的 readabilityHandler（各自跑在系統管理的併發 queue 上）互相搶。
+final class BibleQueryTask {
+    private let process = Process()
+    private let ioQueue = DispatchQueue(label: "BibleQueryTask.io")
+    private var stdoutData = Data()
+    private var stderrText = ""
+    private var isCancelled = false
+    private var didFinish = false
 
-    let process = Process()
-    configureRubyProcess(process, scriptPath: cliPath.path, arguments: [rawText, enabledTokens])
+    func start(
+        scriptDir: URL,
+        rawText: String,
+        enabledTokens: String,
+        completion: @escaping (Result<(String, [QueriedVerseGroup], [String]), Error>) -> Void
+    ) {
+        let cliPath = scriptDir.appendingPathComponent("advanced_bible_query_cli.rb")
+        configureRubyProcess(process, scriptPath: cliPath.path, arguments: [rawText, enabledTokens])
 
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
 
-    do {
-        try process.run()
-    } catch {
-        return .failure(QueryError(message: "無法啟動 ruby: \(error.localizedDescription)"))
+        stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty, let self else { return }
+            self.ioQueue.async { self.stdoutData.append(data) }
+        }
+
+        stderrPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty, let self, let text = String(data: data, encoding: .utf8) else { return }
+            self.ioQueue.async { self.stderrText += text }
+        }
+
+        process.terminationHandler = { [weak self] _ in
+            guard let self else { return }
+            self.ioQueue.async {
+                // process 結束不代表兩個 readabilityHandler 都已經把最後一批資料收完，
+                // 這裡先關掉 handler 再用 readDataToEndOfFile 把管線剩下的內容一次讀乾淨
+                stdoutPipe.fileHandleForReading.readabilityHandler = nil
+                stderrPipe.fileHandleForReading.readabilityHandler = nil
+                let leftoverOut = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+                if !leftoverOut.isEmpty { self.stdoutData.append(leftoverOut) }
+                let leftoverErr = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                if !leftoverErr.isEmpty, let text = String(data: leftoverErr, encoding: .utf8) {
+                    self.stderrText += text
+                }
+                self.finish(completion: completion)
+            }
+        }
+
+        do {
+            try process.run()
+        } catch {
+            completion(.failure(QueryError(message: "無法啟動 ruby: \(error.localizedDescription)")))
+        }
     }
-    process.waitUntilExit()
 
-    let data = stdout.fileHandleForReading.readDataToEndOfFile()
-    // 不管成功或失敗都先讀出來：CLI 內部的 warn（例如 SpringBibleService 重試紀錄）都是走這條
-    // stderr pipe，只有在真的解析失敗時才印出來的話，逾時之類「stdout 仍是合法 JSON」的情境
-    // 就會把這些診斷資訊直接丟掉，Xcode Console 也看不到（因為被導去這個 Pipe 而不是繼承的 stderr）
-    let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    // 只能在 ioQueue 上呼叫
+    private func finish(completion: @escaping (Result<(String, [QueriedVerseGroup], [String]), Error>) -> Void) {
+        guard !didFinish else { return }
+        didFinish = true
+        let stdoutData = self.stdoutData
+        let stderrText = self.stderrText
+        let wasCancelled = self.isCancelled
 
-    guard let decoded = try? JSONDecoder().decode(QueryResult.self, from: data) else {
-        let rawOutput = String(data: data, encoding: .utf8) ?? ""
-        let detail = [stderrText, rawOutput].filter { !$0.isEmpty }.joined(separator: "\n")
-        return .failure(QueryError(message: "無法解析輸出" + (detail.isEmpty ? "" : ": \(detail)"), detail: detail))
+        DispatchQueue.main.async {
+            if wasCancelled {
+                completion(.failure(QueryCancelledError()))
+                return
+            }
+            guard let decoded = try? JSONDecoder().decode(QueryResult.self, from: stdoutData) else {
+                let rawOutput = String(data: stdoutData, encoding: .utf8) ?? ""
+                let detail = [stderrText, rawOutput].filter { !$0.isEmpty }.joined(separator: "\n")
+                completion(.failure(QueryError(message: "無法解析輸出" + (detail.isEmpty ? "" : ": \(detail)"), detail: detail)))
+                return
+            }
+            if let error = decoded.error {
+                completion(.failure(QueryError(message: error, detail: stderrText)))
+                return
+            }
+            completion(.success((decoded.status ?? "", decoded.verses ?? [], decoded.sourceErrors ?? [])))
+        }
     }
-    if let error = decoded.error {
-        return .failure(QueryError(message: error, detail: stderrText))
+
+    // 真的把底層 ruby process 終止掉（SIGTERM），不是單純不理會結果——
+    // 不然使用者取消後那個查詢還在背景繼續打外部聖經網站，下次查詢又會多起一支同時在跑
+    func cancel() {
+        ioQueue.async { self.isCancelled = true }
+        process.terminate()
     }
-    return .success((decoded.status ?? "", decoded.verses ?? [], decoded.sourceErrors ?? []))
 }
 
 private struct KeynotePlaceholderPayload: Encodable {

@@ -3,7 +3,7 @@ import Foundation
 // Keynote 投影片可用的 placeholder；format 用 {token}，實際代換規則對照
 // src/domain/bible_template.rb 開頭的註解：
 // {中}/{英}/{英王}/{新英王}/{韓} - 經文內容　{中書}/{英書}/{韓書} - 書名　{章}/{節} - 章節
-struct KeynotePlaceholder: Identifiable, Hashable {
+struct KeynotePlaceholder: Identifiable, Hashable, Codable {
     var id: UUID = UUID()
     var placeholder: String
     var format: String
