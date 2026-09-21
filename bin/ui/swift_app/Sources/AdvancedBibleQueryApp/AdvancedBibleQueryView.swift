@@ -176,7 +176,7 @@ struct AdvancedBibleQueryView: View {
             .environment(\.defaultMinListRowHeight, 20)
         } content: {
             VStack(alignment: .leading, spacing: 8) {
-                FlowLayout(spacing: 8) {
+                FlowLayout(spacing: 4) {
                     Toggle(isOn: $resultStore.bibleServiceConfig.fhl) {
                         Text("信望愛 CUV").font(.caption)
                     }.toggleStyle(.button)
@@ -237,47 +237,6 @@ struct AdvancedBibleQueryView: View {
                 .frame(minHeight: 200)
             }
         } detail: {
-            Table(resultStore.placeholders) {
-                TableColumn("") { item in
-                    HStack(alignment: .center, spacing: 16) {
-                        Button {
-                            guard resultStore.placeholders.count > 1 else { return }
-                            resultStore.placeholders.removeAll(where: { $0.id == item.id })
-                        } label: {
-                            Image(systemName: "trash")
-                        }.foregroundColor(.red).buttonStyle(.borderless)
-
-                        Button {
-                            let newItem = KeynotePlaceholder(
-                                placeholder: "String", format: "String")
-                            guard
-                                let idx = resultStore.placeholders.firstIndex(where: {
-                                    $0.id == item.id
-                                })
-                            else {
-                                resultStore.placeholders.append(newItem)
-                                return
-                            }
-                            resultStore.placeholders.insert(newItem, at: idx + 1)
-                        } label: {
-                            Image(systemName: "plus")
-                        }.foregroundColor(.green).buttonStyle(.borderless)
-                    }
-                }.width(60)
-
-                TableColumn("佔位符") { item in
-                    TextField(
-                        "佔位符", text: binding($resultStore.placeholders, id: item.id, \.placeholder)
-                    )
-                    .textFieldStyle(.roundedBorder)
-                }
-
-                TableColumn("格式") { item in
-                    TextField("格式", text: binding($resultStore.placeholders, id: item.id, \.format))
-                        .textFieldStyle(.roundedBorder)
-                }
-            }
-            Divider()
             VStack(alignment: .leading) {
                 Button {
                     isCommonFormatPopupDisplaying = true
@@ -320,6 +279,47 @@ struct AdvancedBibleQueryView: View {
                     }.padding(.all, 16).frame(width: 250)
                 }
             }.padding(.all, 8)
+            Table(resultStore.placeholders) {
+                TableColumn("") { item in
+                    HStack(alignment: .center, spacing: 16) {
+                        Button {
+                            guard resultStore.placeholders.count > 1 else { return }
+                            resultStore.placeholders.removeAll(where: { $0.id == item.id })
+                        } label: {
+                            Image(systemName: "trash")
+                        }.foregroundColor(.red).buttonStyle(.borderless)
+
+                        Button {
+                            let newItem = KeynotePlaceholder(
+                                placeholder: "String", format: "String")
+                            guard
+                                let idx = resultStore.placeholders.firstIndex(where: {
+                                    $0.id == item.id
+                                })
+                            else {
+                                resultStore.placeholders.append(newItem)
+                                return
+                            }
+                            resultStore.placeholders.insert(newItem, at: idx + 1)
+                        } label: {
+                            Image(systemName: "plus")
+                        }.foregroundColor(.green).buttonStyle(.borderless)
+                    }
+                }.width(60)
+
+                TableColumn("佔位符") { item in
+                    TextField(
+                        "佔位符", text: binding($resultStore.placeholders, id: item.id, \.placeholder)
+                    )
+                    .textFieldStyle(.roundedBorder)
+                }
+
+                TableColumn("格式") { item in
+                    TextField("格式", text: binding($resultStore.placeholders, id: item.id, \.format))
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+
         }
         .searchable(text: $resultStore.searchDsl, prompt: "找聖經")
         .onSubmit(of: .search) {
