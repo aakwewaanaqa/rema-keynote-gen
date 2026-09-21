@@ -27,10 +27,15 @@ module Domain
     #      ]}
     #
     # 文法（BNF）：
-    #   Query      = BibleRef (';' BibleRef)*
-    #   BibleRef   = IDENTIFIER NUMBER (':' VerseList)?
-    #   VerseList  = VerseItem (',' VerseItem)*
-    #   VerseItem  = NUMBER ('-' NUMBER)?
+    #   Query        = BibleRefGroup (';' BibleRefGroup)*
+    #   BibleRefGroup = IDENTIFIER ChapterVerses (',' ChapterVerses)*   ← 展開成多個 BibleRef
+    #   ChapterVerses = NUMBER (':' VerseList)?
+    #   VerseList    = VerseItem (',' VerseItem)*
+    #   VerseItem    = NUMBER ('-' NUMBER)?
+    #
+    # BibleRefGroup 的逗號分支只在「逗號後面接著 數字:數字」時才成立（換章），
+    # 否則逗號屬於 VerseList，代表同一章的下一節，例如「創2:15,3:6」＝ 創2:15 + 創3:6，
+    # 但「太1:1-5,7」的逗號是同一章多一節，不是換到第 7 章。
     #
     # Parser 採「遞迴下降」(recursive descent) 策略：
     #   每條文法規則對應一個 lambda，從左到右消耗 token，
@@ -60,7 +65,9 @@ module Domain
         item = PARSE_VERSE_ITEM.(tc)
         return nil if item.nil?
         items << item
-        while tc.sneak_peek&.last == :comma
+        # 逗號後面若是「數字:數字」代表換章（見 CHAPTER_SWITCH_AHEAD），
+        # 那個逗號要留給 PARSE_BIBLE_REF_GROUP 處理，節清單在這裡就要停止
+        while tc.sneak_peek&.last == :comma && !CHAPTER_SWITCH_AHEAD.(tc)
           tc.advance
           item = PARSE_VERSE_ITEM.(tc)
           items << item if item
@@ -68,17 +75,10 @@ module Domain
         items
       }
 
-      # IDENTIFIER NUMBER (':' VerseList)?
-      # IDENTIFIER 交給 MATCH_CHAPTER 解析，支援中文全名、中文縮寫、英文全名、英文縮寫
-      PARSE_BIBLE_REF = -> tc {
-        return nil unless tc.sneak_peek&.last == :identifier
-        book_token = tc.advance
+      # NUMBER (':' VerseList)?
+      PARSE_CHAPTER_VERSES = -> tc {
         return nil unless tc.sneak_peek&.last == :number
         chapter = tc.advance.text.to_i
-
-        chapter_info = ::Domain::Bible::MATCH_CHAPTER.(book_token.text)
-        return nil if chapter_info.nil? # 識別不出書卷就跳過整個 ref
-        book_code = chapter_info[:code]
 
         verses = nil
         if tc.sneak_peek&.last == :colon
@@ -86,19 +86,50 @@ module Domain
           verses = PARSE_VERSE_LIST.(tc)
         end
 
-        BibleRef.new(book_code, chapter, verses)
+        { chapter: chapter, verses: verses }
       }
 
-      # BibleRef (';' BibleRef)*
+      # 逗號後面接著「數字 冒號」才代表換章（如 2:15,3:6 的 ',3:6'），
+      # 不消耗 token，只是往後看，讓呼叫端決定逗號到底屬於 VerseList 還是換章
+      CHAPTER_SWITCH_AHEAD = -> tc {
+        tc.sneak_peek&.last == :comma &&
+          tc.peek_at(1)&.last == :number &&
+          tc.peek_at(2)&.last == :colon
+      }
+
+      # IDENTIFIER ChapterVerses (',' ChapterVerses)*  →  [BibleRef, ...]
+      # IDENTIFIER 交給 MATCH_CHAPTER 解析，支援中文全名、中文縮寫、英文全名、英文縮寫。
+      # 回傳陣列是因為一個書名可以展開成好幾個不同章的 BibleRef（換章逗號的緣故）。
+      PARSE_BIBLE_REF_GROUP = -> tc {
+        return [] unless tc.sneak_peek&.last == :identifier
+        book_token = tc.advance
+
+        chapter_info = ::Domain::Bible::MATCH_CHAPTER.(book_token.text)
+        return [] if chapter_info.nil? # 識別不出書卷就跳過整個 ref
+        book_code = chapter_info[:code]
+
+        first = PARSE_CHAPTER_VERSES.(tc)
+        return [] if first.nil?
+        refs = [BibleRef.new(book_code, first[:chapter], first[:verses])]
+
+        while CHAPTER_SWITCH_AHEAD.(tc)
+          tc.advance # 換章的逗號
+          cv = PARSE_CHAPTER_VERSES.(tc)
+          refs << BibleRef.new(book_code, cv[:chapter], cv[:verses]) if cv
+        end
+
+        refs
+      }
+
+      # BibleRefGroup (';' BibleRefGroup)*
+      # 換行在 tokenize 階段已經被轉成 :semicolon（見 tokenize.rb 的 DO_LINE_BREAK），
+      # 所以「一行一筆」的輸入到這裡跟打「;」分隔是同一種 token，不用另外處理。
       PARSE = -> tc {
-        refs = []
-        ref = PARSE_BIBLE_REF.(tc)
-        return Query.new([]) if ref.nil?
-        refs << ref
+        refs = PARSE_BIBLE_REF_GROUP.(tc)
+        return Query.new([]) if refs.empty?
         while tc.sneak_peek&.last == :semicolon
           tc.advance
-          ref = PARSE_BIBLE_REF.(tc)
-          refs << ref if ref
+          refs.concat(PARSE_BIBLE_REF_GROUP.(tc))
         end
         Query.new(refs)
       }

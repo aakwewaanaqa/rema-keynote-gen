@@ -117,6 +117,37 @@ class TestSearchDslAst < Minitest::Test
     q = parse('不存在書9:1')
     assert_equal 0, q.refs.length
   end
+
+  def test_chapter_switch_with_comma
+    q = parse('創2:15,3:6')
+    assert_equal 2, q.refs.length
+    assert_equal :Genesis, q.refs[0].book
+    assert_equal 2, q.refs[0].chapter
+    assert_equal [Ast::Single.new(15)], q.refs[0].verses
+    assert_equal :Genesis, q.refs[1].book
+    assert_equal 3, q.refs[1].chapter
+    assert_equal [Ast::Single.new(6)], q.refs[1].verses
+  end
+
+  def test_chapter_switch_with_ideographic_comma
+    q = parse('創世記2:15、3:6')
+    assert_equal 2, q.refs.length
+    assert_equal 2, q.refs[0].chapter
+    assert_equal 3, q.refs[1].chapter
+  end
+
+  def test_same_chapter_comma_is_not_mistaken_for_chapter_switch
+    q = parse('太1:1-5,7')
+    assert_equal 1, q.refs.length
+    assert_equal [Ast::VRange.new(1, 5), Ast::Single.new(7)], q.refs[0].verses
+  end
+
+  def test_newline_separated_refs_without_semicolon
+    q = parse("啟示錄3:7-8\n使徒行傳5:19\n約翰福音10:7\n路加福音 19:3-5\n林前16:5-9")
+    assert_equal 5, q.refs.length
+    assert_equal [:Revelation, :Acts, :John, :Luke, :'1Corinthians'], q.refs.map(&:book)
+    assert_equal [3, 5, 10, 19, 16], q.refs.map(&:chapter)
+  end
 end
 
 class TestGithubMichaelChanBibleQuery < Minitest::Test
