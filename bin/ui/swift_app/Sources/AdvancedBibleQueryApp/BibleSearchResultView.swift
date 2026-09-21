@@ -47,6 +47,34 @@ struct BibleSearchResultView: View {
         }
     }
 
+    // 分享／複製整段查詢結果用的純文字，排版跟畫面上一節一節疊著看到的一樣
+    // （書卷 章:節 · 譯本 + 內容），不是丟一包 JSON 給別人看
+    private var shareText: String {
+        guard let result else { return "" }
+        return result.verses.map { verseGroup in
+            verseGroup.translations.map { translation in
+                "\(translation.book) \(verseGroup.chapter):\(verseGroup.verse) · \(translation.translation)\n\(translation.content)"
+            }.joined(separator: "\n\n")
+        }.joined(separator: "\n\n")
+    }
+
+    // 把 shareText 寫成暫存檔給分享用（見 SharingPickerButtonView 的說明：AirDrop 對純文字
+    // 支援不穩定，分享檔案才穩定會出現 AirDrop）。用查詢字串當檔名，方便對方收到後看得懂內容
+    private func writeShareFile() -> URL? {
+        guard let result, !shareText.isEmpty else { return nil }
+        let safeName = result.searchDsl
+            .replacingOccurrences(of: "/", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let fileName = (safeName.isEmpty ? "經文" : safeName) + ".txt"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        do {
+            try shareText.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
     var body: some View {
         Group {
             if let result {
@@ -180,6 +208,25 @@ struct BibleSearchResultView: View {
             .disabled(result == nil || isGeneratingKeynote)
             .help("產生 Keynote")
         }
+        ToolbarItem {
+            Button {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(shareText, forType: .string)
+            } label: {
+                Image(systemName: "doc.on.doc")
+            }
+            .keyboardShortcut("c", modifiers: [.command, .shift])
+            .disabled(result == nil)
+            .help("複製全部經文")
+        }
+        ToolbarItem {
+            SharingPickerToolbarButton(
+                itemsProvider: { writeShareFile().map { [$0] } ?? [] },
+                isEnabled: result != nil
+            )
+            .help("分享（AirDrop、訊息…）")
+        }
         if !filterText.isEmpty {
             ToolbarItemGroup {
                 Text(matchLabel)
@@ -227,6 +274,48 @@ struct BibleSearchResultView: View {
         withAnimation {
             proxy.scrollTo(matchedIndices[currentMatchIndex], anchor: .center)
         }
+    }
+}
+
+// 實測發現：分享「純文字字串」時 AirDrop 常常不會出現在清單裡（不管是 ShareLink 還是
+// NSSharingServicePicker 都一樣），但分享「檔案」AirDrop 就一定在——這是 AirDrop 本身
+// 對文字型別支援不穩定，不是這兩個 API 的問題。所以改成點下分享才把經文寫成暫存 .txt 檔，
+// 拿檔案去觸發分享，跟 Finder 分享檔案走同一條路。itemsProvider 用閉包延後到點擊當下才算，
+// 避免每次畫面重繪都在寫暫存檔。
+private final class SharingPickerButtonView: NSButton {
+    var itemsProvider: () -> [Any] = { [] }
+
+    convenience init() {
+        self.init(frame: .zero)
+        bezelStyle = .texturedRounded
+        isBordered = false
+        image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "分享")
+        imagePosition = .imageOnly
+        target = self
+        action = #selector(showPicker)
+    }
+
+    @objc private func showPicker() {
+        let items = itemsProvider()
+        guard !items.isEmpty else { return }
+        NSSharingServicePicker(items: items).show(relativeTo: bounds, of: self, preferredEdge: .minY)
+    }
+}
+
+private struct SharingPickerToolbarButton: NSViewRepresentable {
+    let itemsProvider: () -> [Any]
+    let isEnabled: Bool
+
+    func makeNSView(context: Context) -> SharingPickerButtonView {
+        let view = SharingPickerButtonView()
+        view.itemsProvider = itemsProvider
+        view.isEnabled = isEnabled
+        return view
+    }
+
+    func updateNSView(_ nsView: SharingPickerButtonView, context: Context) {
+        nsView.itemsProvider = itemsProvider
+        nsView.isEnabled = isEnabled
     }
 }
 
