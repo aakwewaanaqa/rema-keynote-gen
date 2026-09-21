@@ -1,7 +1,7 @@
 // SwiftUI 版的進階查詢視窗，對照 bin/ui/windows/advanced_bible_query_window.rb（Glimmer LibUI 版）。
-// 查詢/範本邏輯不重寫，沿用 swift_demo 目錄下的 advanced_bible_query_cli.rb（透過 Process 呼叫 Ruby，JSON 交換資料），
+// 查詢/範本邏輯不重寫，沿用 swift_app 目錄下的 advanced_bible_query_cli.rb（透過 Process 呼叫 Ruby，JSON 交換資料），
 // 這支只負責 UI 跟事件處理。
-// 執行方式：cd bin/ui/swift_demo && swift run AdvancedBibleQueryApp
+// 執行方式：cd bin/ui/swift_app && swift run AdvancedBibleQueryApp
 
 import AppKit
 import SwiftUI

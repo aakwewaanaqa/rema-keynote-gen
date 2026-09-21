@@ -73,7 +73,7 @@ struct AdvancedBibleQueryView: View {
     @State var isSourceErrorDetailDisplaying = false
 
     // #filePath 是 Sources/AdvancedBibleQueryApp/AdvancedBibleQueryView.swift，
-    // 要往上三層（檔名 -> target 目錄 -> Sources 目錄）才會回到 advanced_bible_query_cli.rb 所在的 swift_demo 目錄
+    // 要往上三層（檔名 -> target 目錄 -> Sources 目錄）才會回到 advanced_bible_query_cli.rb 所在的 swift_app 目錄
     private let scriptDir = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .deletingLastPathComponent()

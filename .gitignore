@@ -2,3 +2,6 @@
 .DS_Store
 bible_src
 .claude
+
+# KeynoteRunner 匯出投影片時的暫存/輸出資料夾，是產出物不是原始碼，不該進版控
+keynote_export_*/

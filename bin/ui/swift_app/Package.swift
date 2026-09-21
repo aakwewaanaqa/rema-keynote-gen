@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "BibleQuerySwiftDemo",
+    name: "BibleQueryApp",
     platforms: [.macOS(.v13)],
     targets: [
         .executableTarget(name: "AdvancedBibleQueryApp")

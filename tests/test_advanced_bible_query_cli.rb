@@ -3,12 +3,12 @@ require 'json'
 require 'open3'
 
 # 這支測試不是測 Ruby 的 domain 邏輯（那些已經有 test_seach_dsl.rb 之類的覆蓋），
-# 是專門守住 bin/ui/swift_demo/advanced_bible_query_cli.rb 對 Swift 端的 JSON 契約：
+# 是專門守住 bin/ui/swift_app/advanced_bible_query_cli.rb 對 Swift 端的 JSON 契約：
 # Swift 的 Process 只接 stdout，任何一行意外印到 stderr、或用了呼叫端 ruby 版本不支援的語法，
 # 對 Swift 來說都是同一種症狀——「無法解析輸出」，很難從 Swift 那邊的 log 反查回來。
 # 用 Open3 實際跑一次 CLI（跟 Swift 端 Process 呼叫方式一樣），斷言 stdout 永遠是合法 JSON。
 class TestAdvancedBibleQueryCli < Minitest::Test
-  CLI_PATH = File.expand_path('../bin/ui/swift_demo/advanced_bible_query_cli.rb', __dir__)
+  CLI_PATH = File.expand_path('../bin/ui/swift_app/advanced_bible_query_cli.rb', __dir__)
 
   def run_cli(*args)
     stdout, stderr, status = Open3.capture3('ruby', CLI_PATH, *args)

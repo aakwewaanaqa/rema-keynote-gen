@@ -18,13 +18,13 @@ struct BibleSearchResultView: View {
     @State private var isGenerateErrorDisplaying = false
 
     // #filePath 在 Sources/AdvancedBibleQueryApp/BibleSearchResultView.swift，
-    // 往上三層回到 swift_demo 目錄，對照 advanced_bible_query_cli.rb / generate_keynote_cli.rb 所在位置
+    // 往上三層回到 swift_app 目錄，對照 advanced_bible_query_cli.rb / generate_keynote_cli.rb 所在位置
     private let scriptDir = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .deletingLastPathComponent()
         .deletingLastPathComponent()
 
-    // scriptDir(swift_demo) 再往上兩層是專案根目錄，keynotes/ 底下放現成的範本檔，
+    // scriptDir(swift_app) 再往上兩層是專案根目錄，keynotes/ 底下放現成的範本檔，
     // 挑範本檔的面板預設從這裡開，使用者少翻幾層資料夾
     private var defaultTemplateDir: URL {
         scriptDir.deletingLastPathComponent().deletingLastPathComponent()
