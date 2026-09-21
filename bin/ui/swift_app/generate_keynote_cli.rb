@@ -9,6 +9,7 @@
 # 輸出：JSON { status:, output_dir?:, errors?: [...], error?: } 到 stdout
 
 require "json"
+require "fileutils"
 require_relative "../../../src/shared/readable_pos"
 require_relative "../../../src/shared/string_consumer"
 require_relative "../../../src/shared/token"
@@ -33,10 +34,13 @@ def fail_with(message)
   exit
 end
 
-# Keynote 匯出的檔名（如 template.001.png）看不出對應哪節經文，這裡把檔名換成查詢資料裡的書卷/章/節。
+# Keynote 匯出的檔名（如 template.001.png）看不出對應哪節經文，這裡把檔名換成查詢資料裡的書卷/章/節，
+# 順便把檔案從 KeynoteRunner 為了避開「目的資料夾已存在」限制而建立的暫存 export_dir
+# 搬回使用者選的 output_dir，搬完把已經空了的暫存資料夾刪掉——不然使用者會看到一層
+# 沒意義的 keynote_export_TIMESTAMP 資料夾（這批之前不小心被 commit 進 git 的圖檔就是這樣來的）。
 # entries 跟 slide_groups 是同一個順序（由 outcome[:entries].map 產生），所以「第 N 張投影片」
 # 就對應 entries[N-1]；用檔名裡的數字排序而不是字串排序，避免超過 9 張時 "10" 排到 "2" 前面。
-def rename_exported_slides(export_dir, entries)
+def move_and_rename_exported_slides(export_dir, output_dir, entries)
   files = Dir.glob(File.join(export_dir, '*.png')).sort_by { |f| File.basename(f)[/\d+/].to_i }
   return { renamed: [], warning: nil } if files.empty?
 
@@ -44,16 +48,22 @@ def rename_exported_slides(export_dir, entries)
               "匯出的圖片數量（#{files.size}）跟經節數量（#{entries.size}）對不上，檔名可能對應不準確，已盡量重新命名"
             end
 
-  count = [files.size, entries.size].min
-  renamed = (0...count).map do |i|
+  # 用 files.each_with_index（不是取 min count）：就算數量對不上也要把「每一張」都搬出去，
+  # 不然對不上的那幾張會被留在 export_dir 裡，資料夾就不是空的，最後 rmdir 會失敗
+  renamed = files.each_with_index.map do |file, i|
     entry = entries[i]
-    info = Domain::Bible.chapter_info(entry[:book])
-    book = (info && info[:chinese]) || entry[:book].to_s
-    new_name = format('%02d_%s%s-%s.png', i + 1, book, entry[:chapter], entry[:verse])
-    File.rename(files[i], File.join(export_dir, new_name))
+    new_name = if entry
+                 info = Domain::Bible.chapter_info(entry[:book])
+                 book = (info && info[:chinese]) || entry[:book].to_s
+                 format('%02d_%s%s-%s.png', i + 1, book, entry[:chapter], entry[:verse])
+               else
+                 format('%02d.png', i + 1)
+               end
+    FileUtils.mv(file, File.join(output_dir, new_name))
     new_name
   end
 
+  Dir.rmdir(export_dir)
   { renamed: renamed, warning: warning }
 end
 
@@ -116,10 +126,10 @@ end
 
 fail_with("Keynote 產生失敗（osascript 回傳失敗，請確認 Keynote 已安裝、範本檔案可開啟）") unless result[:success]
 
-rename_outcome = rename_exported_slides(result[:export_dir], outcome[:entries])
+rename_outcome = move_and_rename_exported_slides(result[:export_dir], output_dir, outcome[:entries])
 errors << rename_outcome[:warning] if rename_outcome[:warning]
 
 status = "已產生 #{slide_groups.size} 張投影片"
 status += "（#{errors.size} 個警告）" unless errors.empty?
 
-puts JSON.generate({ status: status, output_dir: result[:export_dir], errors: errors })
+puts JSON.generate({ status: status, output_dir: output_dir, errors: errors })
