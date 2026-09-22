@@ -23,6 +23,14 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 cp "$BIN_PATH" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cp Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
+if [ -x "rubycli" ]; then
+  echo "==> 偵測到 rubycli，一併包進 Resources（app 之後不依賴這台機器的 ruby/rbenv 環境）"
+  cp rubycli "$APP_BUNDLE/Contents/Resources/rubycli"
+else
+  echo "==> 沒有 rubycli，app 仍會 fallback 用 ~/.rbenv/shims/ruby（只能在這台機器跑）"
+  echo "    要包成能 AirDrop 給別人跑的版本，先跑 ./build_rubycli.sh 再重跑這支腳本"
+fi
+
 echo "==> ad-hoc 簽章"
 codesign --force --deep --sign - "$APP_BUNDLE"
 

@@ -1,3 +1,5 @@
 .build/
 .swiftpm/
 *.app
+.tebako_root/
+rubycli

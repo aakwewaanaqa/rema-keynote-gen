@@ -124,9 +124,8 @@ struct BibleSearchResultView: View {
         let enabledTokens = result.config.enabledTokens
         let resultPlaceholders = store.placeholders
 
-        Task.detached { [scriptDir] in
+        Task.detached {
             let outcome = runGenerateKeynoteCLI(
-                scriptDir: scriptDir,
                 rawText: rawText,
                 enabledTokens: enabledTokens,
                 templatePath: templateURL.path,

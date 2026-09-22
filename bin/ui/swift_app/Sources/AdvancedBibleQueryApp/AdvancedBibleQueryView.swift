@@ -88,13 +88,6 @@ struct AdvancedBibleQueryView: View {
     @State var sourceErrorDetail: String?
     @State var isSourceErrorDetailDisplaying = false
 
-    // #filePath 是 Sources/AdvancedBibleQueryApp/AdvancedBibleQueryView.swift，
-    // 要往上三層（檔名 -> target 目錄 -> Sources 目錄）才會回到 advanced_bible_query_cli.rb 所在的 swift_app 目錄
-    private let scriptDir = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-
     // 查詢負責把經文貼進預覽；#region/{token} 範本代換留到「產生 Keynote」那一步再處理，
     // placeholders 表格不跟著查詢結果走，放在 resultStore 共用（見 BibleSearchResultStore）
     func runQuery() {
@@ -109,7 +102,7 @@ struct AdvancedBibleQueryView: View {
 
         let task = BibleQueryTask()
         currentQueryTask = task
-        task.start(scriptDir: scriptDir, rawText: rawText, enabledTokens: enabledTokens) { result in
+        task.start(rawText: rawText, enabledTokens: enabledTokens) { result in
             self.isRunning = false
             self.isProgressSheetDisplaying = false
             self.currentQueryTask = nil
@@ -320,6 +313,15 @@ struct AdvancedBibleQueryView: View {
                 }
             }
 
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    openWindow(id: "lyrics-composer")
+                } label: {
+                    Label("歌詞整理", systemImage: "music.note.list")
+                }
+            }
         }
         .searchable(text: $resultStore.searchDsl, prompt: "找聖經")
         .onSubmit(of: .search) {

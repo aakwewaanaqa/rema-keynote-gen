@@ -47,10 +47,33 @@ struct QueryError: Error {
 // 這樣 UI 才知道不用彈錯誤詳情視窗，只要把狀態列切成「已取消查詢」就好
 struct QueryCancelledError: Error {}
 
-// 從 Xcode Build & Run 啟動的 process，PATH 裡沒有 ~/.rbenv/shims，
-// `env ruby` 會掉回 macOS 內建的系統 Ruby（版本很舊、跟 rbenv 管理的版本行為不一致），
-// 所以直接指到 rbenv shim，不要依賴 PATH 去猜是哪個 ruby
-private func configureRubyProcess(_ process: Process, scriptPath: String, arguments: [String]) {
+// command 是 "query" 或 "generate"，對照 cli_entry.rb 的兩個分支。
+//
+// 優先找 .app/Contents/Resources/rubycli——那是 build_rubycli.sh 用 tebako 把 ruby 直譯器、
+// nokogiri 等 gem、src/、bible_src/ 全部壓成的單一可執行檔，不依賴這台機器裝了什麼 ruby，
+// AirDrop 給別人也能直接跑。
+//
+// 找不到就 fallback 回「這台機器上的原始碼樹 + rbenv ruby」，給 swift run / Xcode Build & Run
+// 這種開發情境用：PATH 裡沒有 ~/.rbenv/shims，`env ruby` 會掉回 macOS 內建的系統 Ruby
+// （版本很舊、跟 rbenv 管理的版本行為不一致），所以直接指到 rbenv shim，不要依賴 PATH 去猜。
+private func configureRubyProcess(_ process: Process, command: String, arguments: [String]) {
+    if let bundledCLI = Bundle.main.url(forResource: "rubycli", withExtension: nil),
+       FileManager.default.isExecutableFile(atPath: bundledCLI.path) {
+        process.executableURL = bundledCLI
+        process.arguments = [command] + arguments
+        return
+    }
+
+    let scriptName = command == "query" ? "advanced_bible_query_cli.rb" : "generate_keynote_cli.rb"
+    // #filePath 在 Sources/AdvancedBibleQueryApp/QueryModels.swift，
+    // 往上三層回到 swift_app 目錄，對照 advanced_bible_query_cli.rb / generate_keynote_cli.rb 所在位置
+    let scriptPath = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent(scriptName)
+        .path
+
     let rbenvRuby = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".rbenv/shims/ruby")
     if FileManager.default.isExecutableFile(atPath: rbenvRuby.path) {
@@ -79,13 +102,11 @@ final class BibleQueryTask {
     private var didFinish = false
 
     func start(
-        scriptDir: URL,
         rawText: String,
         enabledTokens: String,
         completion: @escaping (Result<(String, [QueriedVerseGroup], [String]), Error>) -> Void
     ) {
-        let cliPath = scriptDir.appendingPathComponent("advanced_bible_query_cli.rb")
-        configureRubyProcess(process, scriptPath: cliPath.path, arguments: [rawText, enabledTokens])
+        configureRubyProcess(process, command: "query", arguments: [rawText, enabledTokens])
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -196,15 +217,12 @@ private struct GenerateKeynoteResult: Decodable {
 // 跟查詢本身分開一支 CLI，因為這一步真的會動 Keynote App（開檔、加投影片、匯出、關檔），
 // 觸發時機（按下「產生 Keynote」）跟查詢預覽（按下「查詢」）不一樣。
 func runGenerateKeynoteCLI(
-    scriptDir: URL,
     rawText: String,
     enabledTokens: String,
     templatePath: String,
     outputDir: String,
     placeholders: [KeynotePlaceholder]
 ) -> Result<(String, String?, [String]), GenerateKeynoteError> {
-    let cliPath = scriptDir.appendingPathComponent("generate_keynote_cli.rb")
-
     let payload = placeholders.map { KeynotePlaceholderPayload(placeholder: $0.placeholder, format: $0.format) }
     guard let placeholdersData = try? JSONEncoder().encode(payload),
           let placeholdersJSON = String(data: placeholdersData, encoding: .utf8)
@@ -215,7 +233,7 @@ func runGenerateKeynoteCLI(
     let process = Process()
     configureRubyProcess(
         process,
-        scriptPath: cliPath.path,
+        command: "generate",
         arguments: [rawText, enabledTokens, templatePath, outputDir, placeholdersJSON]
     )
 

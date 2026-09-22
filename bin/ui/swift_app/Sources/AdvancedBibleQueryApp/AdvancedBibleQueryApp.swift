@@ -10,12 +10,19 @@ struct AdvancedBibleQueryApp: App {
     @StateObject private var resultStore = BibleSearchResultStore()
 
     var body: some Scene {
-        WindowGroup("進階查詢") {
-            AdvancedBibleQueryView()
-                .environmentObject(resultStore)
+        // 入口視窗：選要「查經文」還是「歌詞整理」，是 app 啟動時預設開的第一個視窗
+        WindowGroup("Rema 工具", id: "home") {
+            HomeView()
                 // 用 `swift run` 這種裸執行檔啟動時，macOS 的防搶焦點機制會讓新視窗開了也不會自動跳到前面，
                 // 要手動呼叫 activate 才會把它拉到最前面、變成 key window
                 .onAppear { NSApp.activate(ignoringOtherApps: true) }
+        }
+        .defaultSize(width: 480, height: 320)
+        .windowResizability(.contentSize)
+
+        WindowGroup("進階查詢", id: "bible-query") {
+            AdvancedBibleQueryView()
+                .environmentObject(resultStore)
         }
 
         // 用獨立視窗（不是 popover/sheet）顯示某一筆查詢結果的經文；
@@ -23,6 +30,11 @@ struct AdvancedBibleQueryApp: App {
         WindowGroup("查詢結果", for: UUID.self) { $resultID in
             BibleSearchResultView(resultID: resultID)
                 .environmentObject(resultStore)
+        }
+
+        // 歌詞整理（對照 web/lyric-composer.html）：沒有關聯的資料模型，用固定 id 開單一視窗即可
+        WindowGroup("歌詞整理", id: "lyrics-composer") {
+            LyricsComposerView()
         }
     }
 }
