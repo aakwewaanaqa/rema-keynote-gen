@@ -4,8 +4,9 @@
 # 給 AppKit/SwiftUI 端呼叫的 CLI 包裝：查經文 -> 依 placeholder 範本代換 -> 透過
 # KeynoteRunner（osascript）把內容套進 Keynote 範本、輸出投影片。跟 advanced_bible_query_cli.rb
 # 分開，因為查詢/預覽跟「真的動 Keynote」是兩個不同時機觸發的動作。
-# 用法：ruby generate_keynote_cli.rb "<搜尋經節序號>" "<啟用的來源 token，逗號分隔>" "<Keynote 範本路徑>" "<輸出資料夾>" '<placeholders JSON>' ["<母片名稱>"]
+# 用法：ruby generate_keynote_cli.rb "<搜尋經節序號>" "<啟用的來源 token，逗號分隔>" "<Keynote 範本路徑>" "<輸出資料夾>" '<placeholders JSON>' ["<母片名稱>"] ["<是否匯出圖片 1/0>"]
 #   母片名稱可省略或給空字串，就沿用範本 slide 1 的母片（見 KeynoteRunner.build_script）
+#   是否匯出圖片省略時預設 1；給 0 就只把投影片貼進新簡報（存成 .key 並保持開啟），不出 PNG
 #   placeholders JSON 格式：[{ "placeholder": "...", "format": "{中}" }, ...]
 # 輸出：JSON { status:, output_dir?:, errors?: [...], error?: } 到 stdout
 
@@ -74,6 +75,7 @@ template_path = ARGV[2]&.dup&.force_encoding('UTF-8')
 output_dir    = ARGV[3]&.dup&.force_encoding('UTF-8')
 placeholders_json = ARGV[4]&.dup&.force_encoding('UTF-8') || '[]'
 master_name   = ARGV[5]&.dup&.force_encoding('UTF-8')
+export_images = ARGV[6] != '0'
 
 fail_with("缺少查詢字串") if raw_text.nil? || raw_text.empty?
 fail_with("缺少 Keynote 範本路徑") if template_path.nil? || template_path.empty?
@@ -139,7 +141,8 @@ result = begin
     placeholders: placeholder_names,
     output_dir: output_dir,
     master_name: master_name,
-    keep_open_path: keynote_path
+    keep_open_path: keynote_path,
+    export_images: export_images
   )
 rescue => e
   fail_with("osascript 執行失敗: #{e.message}")
@@ -150,10 +153,12 @@ unless result[:success]
   fail_with("Keynote 產生失敗（osascript 回傳失敗，請確認 Keynote 已安裝、範本檔案可開啟#{hint}）")
 end
 
-rename_outcome = move_and_rename_exported_slides(result[:export_dir], output_dir, outcome[:entries])
-errors << rename_outcome[:warning] if rename_outcome[:warning]
+if export_images
+  rename_outcome = move_and_rename_exported_slides(result[:export_dir], output_dir, outcome[:entries])
+  errors << rename_outcome[:warning] if rename_outcome[:warning]
+end
 
-status = "已產生 #{slide_groups.size} 張投影片"
+status = export_images ? "已產生 #{slide_groups.size} 張投影片並匯出圖片" : "已貼上 #{slide_groups.size} 張投影片"
 status += "（#{errors.size} 個警告）" unless errors.empty?
 
 puts JSON.generate({ status: status, output_dir: output_dir, keynote_path: keynote_path, errors: errors })

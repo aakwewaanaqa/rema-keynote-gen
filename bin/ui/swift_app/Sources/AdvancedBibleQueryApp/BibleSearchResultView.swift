@@ -12,6 +12,8 @@ struct BibleSearchResultView: View {
     @State private var currentMatchIndex = 0
 
     @State private var isGeneratingKeynote = false
+    // 「同時匯出 PNG 圖片」勾選框記住上次的選擇：常常只是要把經文貼進簡報、不需要出圖
+    @AppStorage("generateKeynoteExportImages") private var exportImages = true
     @State private var generateSuccessMessage = ""
     @State private var isGenerateSuccessDisplaying = false
     @State private var generateErrorDetail: String?
@@ -138,8 +140,8 @@ struct BibleSearchResultView: View {
             await MainActor.run {
                 switch layoutsOutcome {
                 case .success(let layouts):
-                    guard let masterChoice = pickMasterSlide(layouts: layouts),
-                          let outputDirURL = pickOutputDirectory()
+                    guard let options = pickGenerateOptions(layouts: layouts),
+                          let outputDirURL = pickOutputDirectory(exportImages: options.exportImages)
                     else {
                         isGeneratingKeynote = false
                         return
@@ -148,7 +150,8 @@ struct BibleSearchResultView: View {
                         for: result,
                         templateURL: templateURL,
                         outputDirURL: outputDirURL,
-                        masterName: masterChoice.name
+                        masterName: options.masterName,
+                        exportImages: options.exportImages
                     )
                 case .failure(let error):
                     isGeneratingKeynote = false
@@ -162,7 +165,8 @@ struct BibleSearchResultView: View {
         for result: BibleSearchResult,
         templateURL: URL,
         outputDirURL: URL,
-        masterName: String?
+        masterName: String?,
+        exportImages: Bool
     ) {
         let rawText = result.searchDsl
         let enabledTokens = result.config.enabledTokens
@@ -175,7 +179,8 @@ struct BibleSearchResultView: View {
                 templatePath: templateURL.path,
                 outputDir: outputDirURL.path,
                 placeholders: resultPlaceholders,
-                masterName: masterName
+                masterName: masterName,
+                exportImages: exportImages
             )
             await MainActor.run {
                 isGeneratingKeynote = false
@@ -200,13 +205,15 @@ struct BibleSearchResultView: View {
         isGenerateErrorDisplaying = true
     }
 
-    // 選單第一項是「沿用第 1 張投影片的母片」（name 為 nil，也就是原本的行為），其後列出範本裡所有母片。
-    // 回傳 nil 代表使用者按了取消；用一層 struct 包起來，才分得出「取消」跟「選了預設」
-    private struct MasterSlideChoice {
-        let name: String?
+    // 母片選單第一項是「沿用第 1 張投影片的母片」（masterName 為 nil，也就是原本的行為），其後列出範本裡所有母片；
+    // 下面再一個「同時匯出 PNG 圖片」勾選框。回傳 nil 代表使用者按了取消；
+    // 用一層 struct 包起來，才分得出「取消」跟「選了預設母片」
+    private struct GenerateOptions {
+        let masterName: String?
+        let exportImages: Bool
     }
 
-    private func pickMasterSlide(layouts: [String]) -> MasterSlideChoice? {
+    private func pickGenerateOptions(layouts: [String]) -> GenerateOptions? {
         let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 280, height: 26), pullsDown: false)
         popup.addItem(withTitle: "沿用第 1 張投影片的母片")
         if !layouts.isEmpty {
@@ -217,15 +224,28 @@ struct BibleSearchResultView: View {
             }
         }
 
+        let exportCheckbox = NSButton(checkboxWithTitle: "同時匯出 PNG 圖片", target: nil, action: nil)
+        exportCheckbox.state = exportImages ? .on : .off
+
+        let stack = NSStackView(views: [popup, exportCheckbox])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 10
+        stack.frame = NSRect(x: 0, y: 0, width: 280, height: 56)
+
         let alert = NSAlert()
         alert.messageText = "選擇母片"
-        alert.informativeText = "新投影片會套用這張母片，母片裡的文字框內容要跟 placeholder 對得上才會被替換。"
-        alert.accessoryView = popup
+        alert.informativeText = "新投影片會套用這張母片，母片裡的文字框內容要跟 placeholder 對得上才會被替換。簡報會存成 .key 並保持開啟；不勾匯出圖片就只貼上投影片。"
+        alert.accessoryView = stack
         alert.addButton(withTitle: "下一步")
         alert.addButton(withTitle: "取消")
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
 
-        return MasterSlideChoice(name: popup.indexOfSelectedItem == 0 ? nil : popup.titleOfSelectedItem)
+        exportImages = exportCheckbox.state == .on
+        return GenerateOptions(
+            masterName: popup.indexOfSelectedItem == 0 ? nil : popup.titleOfSelectedItem,
+            exportImages: exportImages
+        )
     }
 
     // Keynote 有開著（且存過檔）的文件就先跳選單讓使用者直接挑，最後一項「選擇其他檔案…」才開檔案面板；
@@ -272,9 +292,10 @@ struct BibleSearchResultView: View {
         return panel.runModal() == .OK ? panel.url : nil
     }
 
-    private func pickOutputDirectory() -> URL? {
+    // 不出圖時資料夾只用來放產生的 .key，標題跟著改，免得使用者以為還會輸出圖片
+    private func pickOutputDirectory(exportImages: Bool) -> URL? {
         let panel = NSOpenPanel()
-        panel.title = "選擇投影片輸出資料夾"
+        panel.title = exportImages ? "選擇投影片輸出資料夾" : "選擇簡報存放資料夾"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true

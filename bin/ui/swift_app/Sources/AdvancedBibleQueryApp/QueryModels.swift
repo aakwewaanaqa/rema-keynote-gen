@@ -220,7 +220,8 @@ func runGenerateKeynoteCLI(
     templatePath: String,
     outputDir: String,
     placeholders: [KeynotePlaceholder],
-    masterName: String?
+    masterName: String?,
+    exportImages: Bool
 ) -> Result<(String, String?, String?, [String]), GenerateKeynoteError> {
     let payload = placeholders.map { KeynotePlaceholderPayload(placeholder: $0.placeholder, format: $0.format) }
     guard let placeholdersData = try? JSONEncoder().encode(payload),
@@ -233,7 +234,7 @@ func runGenerateKeynoteCLI(
     configureRubyProcess(
         process,
         command: "generate",
-        arguments: [rawText, enabledTokens, templatePath, outputDir, placeholdersJSON, masterName ?? ""]
+        arguments: [rawText, enabledTokens, templatePath, outputDir, placeholdersJSON, masterName ?? "", exportImages ? "1" : "0"]
     )
 
     let stdout = Pipe()

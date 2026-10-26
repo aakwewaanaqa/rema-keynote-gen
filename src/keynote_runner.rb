@@ -13,9 +13,10 @@ class KeynoteRunner
   # master_name 是範本裡的母片（slide layout）名稱，nil/空字串就沿用範本 slide 1 的母片（見 build_script 的說明）
   # keep_open_path 有給的話，範本改複製到這個路徑（不是暫存資料夾），產生完存檔並留在 Keynote 裡開著，
   # 讓使用者可以接著改、⌘S 也存得回這個檔；沒給就跟原本一樣用暫存複本、產生完不存檔直接關掉
-  def self.export(template:, slide_groups:, placeholders:, output_dir:, master_name: nil, keep_open_path: nil)
+  # export_images: false 就只貼投影片不匯出圖片，回傳的 export_dir 是 nil（只在 keep_open_path 有給時才有意義）
+  def self.export(template:, slide_groups:, placeholders:, output_dir:, master_name: nil, keep_open_path: nil, export_images: true)
     FileUtils.mkdir_p(output_dir)
-    export_dir = unique_export_dir(output_dir)
+    export_dir = export_images ? unique_export_dir(output_dir) : nil
     success = if keep_open_path
                 FileUtils.cp_r(template, keep_open_path)
                 system("osascript", "-e", build_script(keep_open_path, slide_groups, placeholders, export_dir, master_name, keep_open: true))
@@ -150,7 +151,7 @@ class KeynoteRunner
           set baseLayout to #{base_layout}
           #{add_slides}
           delete slide 1
-          export to POSIX file #{q(output_dir)} as slide images with properties {image format:PNG}
+          #{output_dir ? "export to POSIX file #{q(output_dir)} as slide images with properties {image format:PNG}" : ''}
           #{keep_open ? 'save doc' : 'close saving no'}
         end tell
       end tell
