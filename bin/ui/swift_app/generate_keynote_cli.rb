@@ -4,7 +4,8 @@
 # 給 AppKit/SwiftUI 端呼叫的 CLI 包裝：查經文 -> 依 placeholder 範本代換 -> 透過
 # KeynoteRunner（osascript）把內容套進 Keynote 範本、輸出投影片。跟 advanced_bible_query_cli.rb
 # 分開，因為查詢/預覽跟「真的動 Keynote」是兩個不同時機觸發的動作。
-# 用法：ruby generate_keynote_cli.rb "<搜尋經節序號>" "<啟用的來源 token，逗號分隔>" "<Keynote 範本路徑>" "<輸出資料夾>" '<placeholders JSON>'
+# 用法：ruby generate_keynote_cli.rb "<搜尋經節序號>" "<啟用的來源 token，逗號分隔>" "<Keynote 範本路徑>" "<輸出資料夾>" '<placeholders JSON>' ["<母片名稱>"]
+#   母片名稱可省略或給空字串，就沿用範本 slide 1 的母片（見 KeynoteRunner.build_script）
 #   placeholders JSON 格式：[{ "placeholder": "...", "format": "{中}" }, ...]
 # 輸出：JSON { status:, output_dir?:, errors?: [...], error?: } 到 stdout
 
@@ -72,6 +73,7 @@ enabled_text  = ARGV[1]&.dup&.force_encoding('UTF-8') || ''
 template_path = ARGV[2]&.dup&.force_encoding('UTF-8')
 output_dir    = ARGV[3]&.dup&.force_encoding('UTF-8')
 placeholders_json = ARGV[4]&.dup&.force_encoding('UTF-8') || '[]'
+master_name   = ARGV[5]&.dup&.force_encoding('UTF-8')
 
 fail_with("缺少查詢字串") if raw_text.nil? || raw_text.empty?
 fail_with("缺少 Keynote 範本路徑") if template_path.nil? || template_path.empty?
@@ -113,18 +115,40 @@ slide_groups = outcome[:entries].map { |entry|
 }
 placeholder_names = placeholders.map { |ph| ph['placeholder'].to_s }
 
+# 產生完的簡報另存成 .key 放在輸出資料夾（跟 PNG 一起），並留在 Keynote 裡開著讓使用者接著改。
+# 檔名用查詢字串，看得出是哪段經文；路徑分隔字元、換行（多筆查詢可用換行分隔）都換掉，同名就加流水號
+def unique_keynote_path(output_dir, raw_text)
+  name = raw_text.gsub(%r{[/:\n\r]+}, '-').strip[0, 60]
+  name = '經文' if name.empty?
+  path = File.join(output_dir, "#{name}.key")
+  suffix = 1
+  while File.exist?(path)
+    path = File.join(output_dir, "#{name}_#{suffix}.key")
+    suffix += 1
+  end
+  path
+end
+
+FileUtils.mkdir_p(output_dir)
+keynote_path = unique_keynote_path(output_dir, raw_text)
+
 result = begin
   KeynoteRunner.export(
     template: template_path,
     slide_groups: slide_groups,
     placeholders: placeholder_names,
-    output_dir: output_dir
+    output_dir: output_dir,
+    master_name: master_name,
+    keep_open_path: keynote_path
   )
 rescue => e
   fail_with("osascript 執行失敗: #{e.message}")
 end
 
-fail_with("Keynote 產生失敗（osascript 回傳失敗，請確認 Keynote 已安裝、範本檔案可開啟）") unless result[:success]
+unless result[:success]
+  hint = master_name.nil? || master_name.empty? ? "" : "、母片「#{master_name}」存在於範本中"
+  fail_with("Keynote 產生失敗（osascript 回傳失敗，請確認 Keynote 已安裝、範本檔案可開啟#{hint}）")
+end
 
 rename_outcome = move_and_rename_exported_slides(result[:export_dir], output_dir, outcome[:entries])
 errors << rename_outcome[:warning] if rename_outcome[:warning]
@@ -132,4 +156,4 @@ errors << rename_outcome[:warning] if rename_outcome[:warning]
 status = "已產生 #{slide_groups.size} 張投影片"
 status += "（#{errors.size} 個警告）" unless errors.empty?
 
-puts JSON.generate({ status: status, output_dir: output_dir, errors: errors })
+puts JSON.generate({ status: status, output_dir: output_dir, keynote_path: keynote_path, errors: errors })

@@ -112,14 +112,58 @@ struct BibleSearchResultView: View {
         }
     }
 
-    // 依序跳範本檔案面板、輸出資料夾面板，都選好才真的動 Keynote（osascript 開檔/加投影片/匯出/關檔），
-    // 使用者取消任一步就整個放棄，不做部分執行
+    // 依序跳範本選擇、母片選單、輸出資料夾面板，都選好才真的動 Keynote（osascript 開檔/加投影片/匯出/關檔），
+    // 使用者取消任一步就整個放棄，不做部分執行。開著的檔案清單、母片清單都要透過 osascript 問 Keynote
+    // （母片那步約要等幾秒），所以一開始就把 isGeneratingKeynote 設起來，讓工具列按鈕轉圈、也擋住重複點擊
     private func generateKeynote(for result: BibleSearchResult) {
         guard !isGeneratingKeynote else { return }
-        guard let templateURL = pickTemplateFile() else { return }
-        guard let outputDirURL = pickOutputDirectory() else { return }
 
         isGeneratingKeynote = true
+        Task.detached {
+            // 問不到開著的檔案（例如沒給 Keynote 自動化權限）不算錯，直接退回只用檔案面板挑範本
+            let openDocuments = (try? runListKeynoteOpenDocumentsCLI().get()) ?? []
+            await MainActor.run {
+                guard let templateURL = pickTemplate(openDocuments: openDocuments) else {
+                    isGeneratingKeynote = false
+                    return
+                }
+                chooseMasterAndGenerate(for: result, templateURL: templateURL)
+            }
+        }
+    }
+
+    private func chooseMasterAndGenerate(for result: BibleSearchResult, templateURL: URL) {
+        Task.detached {
+            let layoutsOutcome = runListKeynoteLayoutsCLI(templatePath: templateURL.path)
+            await MainActor.run {
+                switch layoutsOutcome {
+                case .success(let layouts):
+                    guard let masterChoice = pickMasterSlide(layouts: layouts),
+                          let outputDirURL = pickOutputDirectory()
+                    else {
+                        isGeneratingKeynote = false
+                        return
+                    }
+                    runGenerateKeynote(
+                        for: result,
+                        templateURL: templateURL,
+                        outputDirURL: outputDirURL,
+                        masterName: masterChoice.name
+                    )
+                case .failure(let error):
+                    isGeneratingKeynote = false
+                    showGenerateError(error)
+                }
+            }
+        }
+    }
+
+    private func runGenerateKeynote(
+        for result: BibleSearchResult,
+        templateURL: URL,
+        outputDirURL: URL,
+        masterName: String?
+    ) {
         let rawText = result.searchDsl
         let enabledTokens = result.config.enabledTokens
         let resultPlaceholders = store.placeholders
@@ -130,24 +174,89 @@ struct BibleSearchResultView: View {
                 enabledTokens: enabledTokens,
                 templatePath: templateURL.path,
                 outputDir: outputDirURL.path,
-                placeholders: resultPlaceholders
+                placeholders: resultPlaceholders,
+                masterName: masterName
             )
             await MainActor.run {
                 isGeneratingKeynote = false
                 switch outcome {
-                case .success(let (status, exportDir, warnings)):
+                case .success(let (status, exportDir, keynotePath, warnings)):
                     var lines = [status]
                     if let exportDir { lines.append("輸出位置：\(exportDir)") }
+                    if let keynotePath { lines.append("簡報已存成並保持開啟：\(keynotePath)") }
                     lines.append(contentsOf: warnings)
                     generateSuccessMessage = lines.joined(separator: "\n")
                     isGenerateSuccessDisplaying = true
                 case .failure(let error):
-                    let detail = [error.message, error.detail].compactMap { $0 }.filter { !$0.isEmpty }
-                    generateErrorDetail = detail.joined(separator: "\n\n---\n\n")
-                    isGenerateErrorDisplaying = true
+                    showGenerateError(error)
                 }
             }
         }
+    }
+
+    private func showGenerateError(_ error: GenerateKeynoteError) {
+        let detail = [error.message, error.detail].compactMap { $0 }.filter { !$0.isEmpty }
+        generateErrorDetail = detail.joined(separator: "\n\n---\n\n")
+        isGenerateErrorDisplaying = true
+    }
+
+    // 選單第一項是「沿用第 1 張投影片的母片」（name 為 nil，也就是原本的行為），其後列出範本裡所有母片。
+    // 回傳 nil 代表使用者按了取消；用一層 struct 包起來，才分得出「取消」跟「選了預設」
+    private struct MasterSlideChoice {
+        let name: String?
+    }
+
+    private func pickMasterSlide(layouts: [String]) -> MasterSlideChoice? {
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 280, height: 26), pullsDown: false)
+        popup.addItem(withTitle: "沿用第 1 張投影片的母片")
+        if !layouts.isEmpty {
+            popup.menu?.addItem(.separator())
+            // 用 NSMenuItem 直接加，不用 addItems(withTitles:)：後者遇到同名項目會把前一個蓋掉
+            for layout in layouts {
+                popup.menu?.addItem(NSMenuItem(title: layout, action: nil, keyEquivalent: ""))
+            }
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "選擇母片"
+        alert.informativeText = "新投影片會套用這張母片，母片裡的文字框內容要跟 placeholder 對得上才會被替換。"
+        alert.accessoryView = popup
+        alert.addButton(withTitle: "下一步")
+        alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+
+        return MasterSlideChoice(name: popup.indexOfSelectedItem == 0 ? nil : popup.titleOfSelectedItem)
+    }
+
+    // Keynote 有開著（且存過檔）的文件就先跳選單讓使用者直接挑，最後一項「選擇其他檔案…」才開檔案面板；
+    // 沒有開著的文件就直接開檔案面板，跟原本一樣。產生時用的是範本的暫存複本（見 KeynoteRunner.with_template_copy），
+    // 開著的那份文件不會被動到，但也代表沒存檔的變更不會反映出來，所以有未儲存變更的項目要標出來
+    private func pickTemplate(openDocuments: [KeynoteOpenDocument]) -> URL? {
+        guard !openDocuments.isEmpty else { return pickTemplateFile() }
+
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26), pullsDown: false)
+        // 用 NSMenuItem 直接加，不用 addItems(withTitles:)：後者遇到同名項目（不同資料夾的同名檔）會把前一個蓋掉
+        for document in openDocuments {
+            let url = URL(fileURLWithPath: document.path)
+            let title = url.lastPathComponent + (document.modified ? "（有未儲存的變更）" : "")
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.toolTip = document.path
+            popup.menu?.addItem(item)
+        }
+        popup.menu?.addItem(.separator())
+        popup.menu?.addItem(NSMenuItem(title: "選擇其他檔案…", action: nil, keyEquivalent: ""))
+
+        let alert = NSAlert()
+        alert.messageText = "選擇 Keynote 範本"
+        alert.informativeText = "可以直接使用 Keynote 中開著的檔案。產生時會用檔案上次儲存的內容，不會更動開著的文件；有未儲存的變更請先存檔。"
+        alert.accessoryView = popup
+        alert.addButton(withTitle: "下一步")
+        alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+
+        let index = popup.indexOfSelectedItem
+        guard openDocuments.indices.contains(index) else { return pickTemplateFile() }
+        return URL(fileURLWithPath: openDocuments[index].path)
     }
 
     private func pickTemplateFile() -> URL? {

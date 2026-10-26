@@ -47,24 +47,20 @@ struct QueryError: Error {
 // 這樣 UI 才知道不用彈錯誤詳情視窗，只要把狀態列切成「已取消查詢」就好
 struct QueryCancelledError: Error {}
 
-// command 是 "query" 或 "generate"，對照 cli_entry.rb 的兩個分支。
+// command 是 "query"、"generate"、"layouts" 或 "documents"，對照下面各自對應的 CLI 腳本。
 //
-// 優先找 .app/Contents/Resources/rubycli——那是 build_rubycli.sh 用 tebako 把 ruby 直譯器、
-// nokogiri 等 gem、src/、bible_src/ 全部壓成的單一可執行檔，不依賴這台機器裝了什麼 ruby，
-// AirDrop 給別人也能直接跑。
-//
-// 找不到就 fallback 回「這台機器上的原始碼樹 + rbenv ruby」，給 swift run / Xcode Build & Run
-// 這種開發情境用：PATH 裡沒有 ~/.rbenv/shims，`env ruby` 會掉回 macOS 內建的系統 Ruby
+// 一律直接跑這台機器上原始碼樹裡的腳本（之前試過把 ruby 打包進 app，但那是打包當下程式碼的快照，
+// 改了 src/ 或 CLI 腳本卻忘了重新打包，app 就會默默跑到舊程式，所以拿掉了）。
+// PATH 裡沒有 ~/.rbenv/shims，`env ruby` 會掉回 macOS 內建的系統 Ruby
 // （版本很舊、跟 rbenv 管理的版本行為不一致），所以直接指到 rbenv shim，不要依賴 PATH 去猜。
 private func configureRubyProcess(_ process: Process, command: String, arguments: [String]) {
-    if let bundledCLI = Bundle.main.url(forResource: "rubycli", withExtension: nil),
-       FileManager.default.isExecutableFile(atPath: bundledCLI.path) {
-        process.executableURL = bundledCLI
-        process.arguments = [command] + arguments
-        return
+    let scriptName: String
+    switch command {
+    case "query": scriptName = "advanced_bible_query_cli.rb"
+    case "layouts": scriptName = "list_keynote_layouts_cli.rb"
+    case "documents": scriptName = "list_keynote_open_documents_cli.rb"
+    default: scriptName = "generate_keynote_cli.rb"
     }
-
-    let scriptName = command == "query" ? "advanced_bible_query_cli.rb" : "generate_keynote_cli.rb"
     // #filePath 在 Sources/AdvancedBibleQueryApp/QueryModels.swift，
     // 往上三層回到 swift_app 目錄，對照 advanced_bible_query_cli.rb / generate_keynote_cli.rb 所在位置
     let scriptPath = URL(fileURLWithPath: #filePath)
@@ -202,12 +198,14 @@ struct GenerateKeynoteError: Error {
 private struct GenerateKeynoteResult: Decodable {
     let status: String?
     let outputDir: String?
+    let keynotePath: String?
     let errors: [String]?
     let error: String?
 
     enum CodingKeys: String, CodingKey {
         case status
         case outputDir = "output_dir"
+        case keynotePath = "keynote_path"
         case errors
         case error
     }
@@ -221,8 +219,9 @@ func runGenerateKeynoteCLI(
     enabledTokens: String,
     templatePath: String,
     outputDir: String,
-    placeholders: [KeynotePlaceholder]
-) -> Result<(String, String?, [String]), GenerateKeynoteError> {
+    placeholders: [KeynotePlaceholder],
+    masterName: String?
+) -> Result<(String, String?, String?, [String]), GenerateKeynoteError> {
     let payload = placeholders.map { KeynotePlaceholderPayload(placeholder: $0.placeholder, format: $0.format) }
     guard let placeholdersData = try? JSONEncoder().encode(payload),
           let placeholdersJSON = String(data: placeholdersData, encoding: .utf8)
@@ -234,7 +233,7 @@ func runGenerateKeynoteCLI(
     configureRubyProcess(
         process,
         command: "generate",
-        arguments: [rawText, enabledTokens, templatePath, outputDir, placeholdersJSON]
+        arguments: [rawText, enabledTokens, templatePath, outputDir, placeholdersJSON, masterName ?? ""]
     )
 
     let stdout = Pipe()
@@ -260,5 +259,84 @@ func runGenerateKeynoteCLI(
     if let error = decoded.error {
         return .failure(GenerateKeynoteError(message: error, detail: stderrText))
     }
-    return .success((decoded.status ?? "", decoded.outputDir, decoded.errors ?? []))
+    return .success((decoded.status ?? "", decoded.outputDir, decoded.keynotePath, decoded.errors ?? []))
+}
+
+private struct ListKeynoteLayoutsResult: Decodable {
+    let layouts: [String]?
+    let error: String?
+}
+
+// 對照 list_keynote_layouts_cli.rb：叫 Keynote 開範本讀出所有母片名稱（讀完就關檔不存），
+// 給產生 Keynote 前挑母片用。錯誤沿用 GenerateKeynoteError，因為這一步就是產生流程的一部分。
+func runListKeynoteLayoutsCLI(templatePath: String) -> Result<[String], GenerateKeynoteError> {
+    let process = Process()
+    configureRubyProcess(process, command: "layouts", arguments: [templatePath])
+
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+
+    do {
+        try process.run()
+    } catch {
+        return .failure(GenerateKeynoteError(message: "無法啟動 ruby: \(error.localizedDescription)"))
+    }
+    process.waitUntilExit()
+
+    let data = stdout.fileHandleForReading.readDataToEndOfFile()
+    let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+
+    guard let decoded = try? JSONDecoder().decode(ListKeynoteLayoutsResult.self, from: data) else {
+        let rawOutput = String(data: data, encoding: .utf8) ?? ""
+        let detail = [stderrText, rawOutput].filter { !$0.isEmpty }.joined(separator: "\n")
+        return .failure(GenerateKeynoteError(message: "無法解析母片清單" + (detail.isEmpty ? "" : ": \(detail)"), detail: detail))
+    }
+    if let error = decoded.error {
+        return .failure(GenerateKeynoteError(message: error, detail: stderrText))
+    }
+    return .success(decoded.layouts ?? [])
+}
+
+struct KeynoteOpenDocument: Decodable {
+    let path: String
+    let modified: Bool
+}
+
+private struct ListKeynoteOpenDocumentsResult: Decodable {
+    let documents: [KeynoteOpenDocument]?
+    let error: String?
+}
+
+// 對照 list_keynote_open_documents_cli.rb：列出 Keynote 目前開著（且存過檔）的文件，給挑範本時直接選。
+// Keynote 沒在跑就回空陣列，不會把 Keynote 叫起來
+func runListKeynoteOpenDocumentsCLI() -> Result<[KeynoteOpenDocument], GenerateKeynoteError> {
+    let process = Process()
+    configureRubyProcess(process, command: "documents", arguments: [])
+
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+
+    do {
+        try process.run()
+    } catch {
+        return .failure(GenerateKeynoteError(message: "無法啟動 ruby: \(error.localizedDescription)"))
+    }
+    process.waitUntilExit()
+
+    let data = stdout.fileHandleForReading.readDataToEndOfFile()
+    let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+
+    guard let decoded = try? JSONDecoder().decode(ListKeynoteOpenDocumentsResult.self, from: data) else {
+        let rawOutput = String(data: data, encoding: .utf8) ?? ""
+        let detail = [stderrText, rawOutput].filter { !$0.isEmpty }.joined(separator: "\n")
+        return .failure(GenerateKeynoteError(message: "無法解析開啟中的檔案清單" + (detail.isEmpty ? "" : ": \(detail)"), detail: detail))
+    }
+    if let error = decoded.error {
+        return .failure(GenerateKeynoteError(message: error, detail: stderrText))
+    }
+    return .success(decoded.documents ?? [])
 }
