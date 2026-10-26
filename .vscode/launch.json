@@ -39,6 +39,26 @@
             "target": "AdvancedBibleQueryApp",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release AdvancedBibleQueryApp (bin/ui/swift_demo)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:rema-keynote-gen}/bin/ui/swift_app",
+            "name": "Debug AdvancedBibleQueryApp (bin/ui/swift_app)",
+            "target": "AdvancedBibleQueryApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug AdvancedBibleQueryApp (bin/ui/swift_app)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:rema-keynote-gen}/bin/ui/swift_app",
+            "name": "Release AdvancedBibleQueryApp (bin/ui/swift_app)",
+            "target": "AdvancedBibleQueryApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release AdvancedBibleQueryApp (bin/ui/swift_app)"
         }
     ]
 }
