@@ -53,6 +53,14 @@ struct QueryCancelledError: Error {}
 // 改了 src/ 或 CLI 腳本卻忘了重新打包，app 就會默默跑到舊程式，所以拿掉了）。
 // PATH 裡沒有 ~/.rbenv/shims，`env ruby` 會掉回 macOS 內建的系統 Ruby
 // （版本很舊、跟 rbenv 管理的版本行為不一致），所以直接指到 rbenv shim，不要依賴 PATH 去猜。
+// 沒有 rbenv 的機器（例如同工跑 install.command 裝的是 Homebrew Ruby，nokogiri 也裝在那份底下）
+// 再依序找 Homebrew 的 Ruby（Apple Silicon 在 /opt/homebrew、Intel 在 /usr/local）。
+private let rubyCandidates: [String] = [
+    FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".rbenv/shims/ruby").path,
+    "/opt/homebrew/opt/ruby/bin/ruby",
+    "/usr/local/opt/ruby/bin/ruby",
+]
+
 private func configureRubyProcess(_ process: Process, command: String, arguments: [String]) {
     let scriptName: String
     switch command {
@@ -70,10 +78,8 @@ private func configureRubyProcess(_ process: Process, command: String, arguments
         .appendingPathComponent(scriptName)
         .path
 
-    let rbenvRuby = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".rbenv/shims/ruby")
-    if FileManager.default.isExecutableFile(atPath: rbenvRuby.path) {
-        process.executableURL = rbenvRuby
+    if let rubyPath = rubyCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+        process.executableURL = URL(fileURLWithPath: rubyPath)
         process.arguments = [scriptPath] + arguments
     } else {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
