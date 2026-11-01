@@ -109,7 +109,7 @@ else
   echo "  文件夾出現了 rema-keynote-gen 資料夾"
 fi
 echo "  App 位置：bin/ui/swift_app/AdvancedBibleQueryApp.app"
-echo "  （終端機版本仍然可以雙擊 start.command 執行）"
+echo "  （之後雙擊 start.command 會自動更新並開啟 App）"
 echo "================================"
 echo ""
 open "$SWIFT_APP_DIR/AdvancedBibleQueryApp.app"
