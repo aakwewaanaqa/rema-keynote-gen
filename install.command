@@ -45,6 +45,9 @@ fi
 
 chmod +x "$INSTALL_DIR/start.command"
 
+# 本機聖經資料放 ~/Library/Application Support/RemaKeynoteGen/bible_src，不在程式資料夾裡
+"$INSTALL_DIR/bin/setup_bible_src.sh"
+
 # ── 3. 編譯 swift_app ─────────────────────────────────────────
 echo "[3/3] 編譯 App（第一次會花幾分鐘）..."
 

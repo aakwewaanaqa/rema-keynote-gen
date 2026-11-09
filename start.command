@@ -12,6 +12,9 @@ echo "檢查更新..."
 git pull || echo "⚠️  無法更新（請確認網路），使用目前版本繼續。"
 echo ""
 
+# 舊版把 bible_src 放在專案根目錄，這裡順便搬到 Application Support；已經搬過就什麼都不做
+"$DIR/bin/setup_bible_src.sh"
+
 SWIFT_APP_DIR="$DIR/bin/ui/swift_app"
 APP_BUNDLE="$SWIFT_APP_DIR/AdvancedBibleQueryApp.app"
 

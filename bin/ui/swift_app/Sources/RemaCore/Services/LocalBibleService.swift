@@ -13,13 +13,13 @@ public struct LocalBibleService: BibleService {
         self.sourceDirectory = sourceDirectory
     }
 
-    public static func cloneCommand(into parent: URL = RemaPaths.repositoryRoot) -> String {
-        "cd \"\(parent.path)\" && git clone https://github.com/michaelchanwahyan/bible_src.git"
+    public static func cloneCommand(into destination: URL = RemaPaths.bibleSource) -> String {
+        "git clone --depth 1 https://github.com/michaelchanwahyan/bible_src.git \"\(destination.path)\""
     }
 
     public func query(_ query: SearchDsl.Query) async throws -> [BibleVerse] {
         guard FileManager.default.fileExists(atPath: sourceDirectory.path) else {
-            throw RemaError("找不到本機聖經資料夾 \(sourceDirectory.path)，請先執行：\(Self.cloneCommand())")
+            throw RemaError("找不到本機聖經資料夾 \(sourceDirectory.path)，請重新執行 install.command，或在終端機執行：\(Self.cloneCommand(into: sourceDirectory))")
         }
 
         var cache: [String: [String]] = [:]

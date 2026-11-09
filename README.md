@@ -36,7 +36,9 @@ make do.test.network   # 連同會打外部聖經網站的測試一起跑
 
 - `Sources/RemaCore`：查詢語法解析、各聖經來源、範本代換、Keynote（osascript）、歌詞解析
 - `Sources/AdvancedBibleQueryApp`：SwiftUI 介面
-- 本機聖經來源（麥可陳 cuv2）讀的是專案根目錄下的 `bible_src`，需要另外 `git clone https://github.com/michaelchanwahyan/bible_src.git`
+- App 的資料放在 `~/Library/Application Support/RemaKeynoteGen/`：
+  - `bible_src/`：本機聖經來源（麥可陳 cuv2），由 `bin/setup_bible_src.sh` 準備（install.command / start.command 會自動跑；舊版放在專案根目錄的會直接搬過去）
+  - `Templates/`：Keynote 範本。`package_app.sh` 把 `keynotes/*.key` 包進 App，App 啟動時補進這裡（只補缺的，不會蓋掉使用者改過的），自己的範本也可以放這裡
 
 ---
 

@@ -19,9 +19,10 @@ struct BibleSearchResultView: View {
     @State private var generateErrorDetail: String?
     @State private var isGenerateErrorDisplaying = false
 
-    // 專案根目錄的 keynotes/ 底下放現成的範本檔，挑範本檔的面板預設從這裡開，使用者少翻幾層資料夾
+    // Application Support 的 Templates/ 放現成的範本檔（App 啟動時從 bundle 複製過去），
+    // 挑範本檔的面板預設從這裡開，使用者少翻幾層資料夾
     private var defaultTemplateDir: URL {
-        RemaPaths.repositoryRoot.appendingPathComponent("keynotes")
+        RemaPaths.templates
     }
 
     var result: BibleSearchResult? {

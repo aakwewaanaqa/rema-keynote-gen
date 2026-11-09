@@ -23,6 +23,18 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 cp "$BIN_PATH" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cp Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
+# 專案 keynotes/ 底下的範本包進 App，App 啟動時會複製到 ~/Library/Application Support/RemaKeynoteGen/Templates
+# （見 RemaPaths.installBundledTemplates）。scratch/ 是實驗品不包。.key 走 Git LFS，沒裝 git-lfs 時拿到的只是文字指標檔，這種不包
+echo "==> 打包範本"
+mkdir -p "$APP_BUNDLE/Contents/Resources/Templates"
+find ../../../keynotes -name "*.key" -not -path "*/scratch/*" -print0 | while IFS= read -r -d "" key; do
+  if head -c 40 "$key" | grep -q "git-lfs.github.com"; then
+    echo "    略過 $(basename "$key")（Git LFS 指標檔，沒有實際內容）"
+  else
+    cp -R "$key" "$APP_BUNDLE/Contents/Resources/Templates/"
+  fi
+done
+
 echo "==> ad-hoc 簽章"
 codesign --force --deep --sign - "$APP_BUNDLE"
 

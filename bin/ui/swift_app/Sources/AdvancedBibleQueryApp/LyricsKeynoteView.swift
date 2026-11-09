@@ -79,7 +79,7 @@ struct LyricsKeynoteView: View {
         panel.title = "選擇模板 .key 檔案"
         panel.allowedContentTypes = [.init(filenameExtension: "key")].compactMap { $0 }
         panel.treatsFilePackagesAsDirectories = false
-        panel.directoryURL = RemaPaths.repositoryRoot.appendingPathComponent("keynotes")
+        panel.directoryURL = RemaPaths.templates
         return panel.runModal() == .OK ? panel.url : nil
     }
 
