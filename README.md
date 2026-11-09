@@ -16,7 +16,27 @@
 
 ## 執行
 
-雙擊 `start.command`，每次執行會自動更新到最新版。
+雙擊 `start.command`，每次執行會自動更新到最新版、重新編譯並開啟 App。
+
+App 首頁有三個功能：
+
+- **查經文**：查詢經文（信望愛、NIV/NKJV/KJV、개역개정），套 placeholder 範本產生 Keynote
+- **歌詞整理**：解析多語歌詞、逐頁對齊，輸出 ProPresenter TXT 或下面格式的歌詞檔
+- **歌詞產生 Keynote**：選範本與歌詞資料夾，把資料夾裡每個 `.txt` 套進範本、匯出 PNG
+
+## 開發
+
+整個專案都是 Swift（SwiftPM 套件在 `bin/ui/swift_app`），不需要 Ruby。
+
+```
+make run.ui            # 編譯、打包並開啟 App
+make do.test.all       # 跑單元測試
+make do.test.network   # 連同會打外部聖經網站的測試一起跑
+```
+
+- `Sources/RemaCore`：查詢語法解析、各聖經來源、範本代換、Keynote（osascript）、歌詞解析
+- `Sources/AdvancedBibleQueryApp`：SwiftUI 介面
+- 本機聖經來源（麥可陳 cuv2）讀的是專案根目錄下的 `bible_src`，需要另外 `git clone https://github.com/michaelchanwahyan/bible_src.git`
 
 ---
 

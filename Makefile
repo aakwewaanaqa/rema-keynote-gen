@@ -1,7 +1,12 @@
+SWIFT_APP := bin/ui/swift_app
+
 run.ui:
-	ruby bin/ui/swift_app/main.rb
+	$(SWIFT_APP)/package_app.sh
+	open $(SWIFT_APP)/AdvancedBibleQueryApp.app
 
 do.test.all:
-	find tests -type f -name 'test*.rb' | while read -r t; do \
-		ruby "$$t"; \
-	done
+	cd $(SWIFT_APP) && swift test
+
+# 會打真的外部聖經網站（BibleGateway、信望愛、holybible.or.kr）
+do.test.network:
+	cd $(SWIFT_APP) && REMA_NETWORK_TESTS=1 swift test

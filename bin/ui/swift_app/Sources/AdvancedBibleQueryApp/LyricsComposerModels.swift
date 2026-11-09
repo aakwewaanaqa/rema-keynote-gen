@@ -1,9 +1,9 @@
 import Foundation
 
 // SwiftUI 版的歌詞整理工具，對照 web/lyric-composer.html：把混合語言 TXT（例如中英交錯）
-// 解析成逐頁對齊的資料、可以手動逐頁修正，最後輸出 ProPresenter TXT 或 main.rb 讀的
+// 解析成逐頁對齊的資料、可以手動逐頁修正，最後輸出 ProPresenter TXT 或「歌詞產生 Keynote」讀的
 // 「Rema 用 TXT」（.r.txt，#! line=/#! placeholders= 包 "# all" ... "# end all"，見
-// src/lyrics_parser.rb）。以前這步是開 lyric-composer.html 手動整理完再存檔餵給 bin/main.rb，
+// RemaCore 的 LyricsParser）。以前這步是開 lyric-composer.html 手動整理完再存檔餵給 bin/main.rb，
 // 這裡先把「整理」這段搬進 app，輸出格式跟工作檔 JSON 都刻意跟 html 版對齊，
 // 舊的 lyrics-project.json 也能直接在這裡開。
 

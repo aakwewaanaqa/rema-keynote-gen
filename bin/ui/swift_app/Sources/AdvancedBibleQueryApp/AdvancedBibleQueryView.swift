@@ -42,7 +42,7 @@ struct BibleServiceConfig: Identifiable, Hashable, Codable {
         return names
     }
 
-    // 傳給 CLI 的啟用來源 token，對照 advanced_bible_query_cli.rb / generate_keynote_cli.rb 的 token_sources
+    // 啟用的來源 token（逗號分隔），對照 RemaCore 的 BibleSource
     var enabledTokens: String {
         var tokens: [String] = []
         if fhl { tokens.append("fhl") }
@@ -72,12 +72,12 @@ struct AdvancedBibleQueryView: View {
     @State var isRunning = false
 
     // 查詢中彈窗：擋住整個視窗讓使用者不用管它，裡面有不確定進度圈跟取消按鈕。
-    // currentQueryTask 留著是為了讓「取消」按鈕能叫到底層還在跑的 ruby process
+    // currentQueryTask 留著是為了讓「取消」按鈕能取消還在進行的查詢
     @State var isProgressSheetDisplaying = false
     @State var queryStartedAt: Date?
     @State var currentQueryTask: BibleQueryTask?
 
-    // 查詢失敗時把完整錯誤訊息（含 CLI 的 stderr 診斷內容）存起來，用彈窗顯示方便複製，
+    // 查詢失敗時把完整錯誤訊息存起來，用彈窗顯示方便複製，
     // 不然逾時這種情況光看 status 那行文字根本看不出卡在哪一步
     @State var errorDetail: String?
     @State var isErrorDetailDisplaying = false
@@ -355,7 +355,7 @@ struct AdvancedBibleQueryView: View {
 // 查詢中顯示的彈窗：不確定進度圈 + 已耗時秒數 + 現在這台 Mac 的網路上下傳速度 + 取消按鈕。
 // 網路速度是量整台機器的網路介面流量（跟 Activity Monitor 同一種數字），不是這次查詢本身傳了多少資料——
 // 帶查經班的人在教會現場常常 Wi-Fi 很多人擠，這裡是要讓人一眼看出「現在是不是網路本身就很慢」。
-// 取消會真的把底層 ruby process 終止掉，見 BibleQueryTask.cancel()
+// 取消會真的把進行中的網路請求取消掉，見 BibleQueryTask.cancel()
 private struct QueryProgressSheet: View {
     let startedAt: Date
     let onCancel: () -> Void

@@ -1,6 +1,5 @@
 // SwiftUI 版的進階查詢視窗，對照 bin/ui/windows/advanced_bible_query_window.rb（Glimmer LibUI 版）。
-// 查詢/範本邏輯不重寫，沿用 swift_app 目錄下的 advanced_bible_query_cli.rb（透過 Process 呼叫 Ruby，JSON 交換資料），
-// 這支只負責 UI 跟事件處理。
+// 查詢/範本/Keynote 邏輯都在 RemaCore（Sources/RemaCore），這個 target 只負責 UI 跟事件處理。
 // 執行方式：cd bin/ui/swift_app && swift run AdvancedBibleQueryApp
 
 import AppKit
@@ -17,7 +16,7 @@ struct AdvancedBibleQueryApp: App {
                 // 要手動呼叫 activate 才會把它拉到最前面、變成 key window
                 .onAppear { NSApp.activate(ignoringOtherApps: true) }
         }
-        .defaultSize(width: 480, height: 320)
+        .defaultSize(width: 680, height: 320)
         .windowResizability(.contentSize)
 
         WindowGroup("進階查詢", id: "bible-query") {
@@ -35,6 +34,11 @@ struct AdvancedBibleQueryApp: App {
         // 歌詞整理（對照 web/lyric-composer.html）：沒有關聯的資料模型，用固定 id 開單一視窗即可
         WindowGroup("歌詞整理", id: "lyrics-composer") {
             LyricsComposerView()
+        }
+
+        // 批次歌詞 TXT → Keynote 投影片 PNG（以前的 bin/main.rb）
+        WindowGroup("歌詞產生 Keynote", id: "lyrics-keynote") {
+            LyricsKeynoteView()
         }
     }
 }

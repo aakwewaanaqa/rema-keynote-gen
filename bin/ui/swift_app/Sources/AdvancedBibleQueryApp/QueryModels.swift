@@ -1,40 +1,13 @@
 import Foundation
+@_exported import RemaCore
 
-// 同一節經文、單一譯本的內容。service 是來源 token（fhl/niv/nkjv/gae/local），
-// translation 是給人看的來源名稱（信望愛 CUV/NIV/...）。book 會跟著這個譯本的語言變
-// （中文譯本顯示中文書名、NIV/NKJV 顯示英文書名、개역개정 顯示韓文書名），所以放在這裡而不是外層。
-struct VerseTranslation: Codable, Hashable {
-    var service: String
-    var translation: String
-    var book: String
-    var content: String
-}
-
-// 同一節經文，底下疊多個譯本——對照 advanced_bible_query_cli.rb 輸出的 verses 陣列，
-// 一節一個 item，不是一節×一譯本一個 item
-struct QueriedVerseGroup: Codable, Hashable {
-    var chapter: Int
-    var verse: Int
-    var translations: [VerseTranslation]
-}
-
-struct QueryResult: Decodable {
-    let status: String?
-    let verses: [QueriedVerseGroup]?
-    let error: String?
-    // 個別查詢來源掛掉（例如某聖經網站故障）的錯誤訊息，跟整體查詢成功與否無關——
-    // 就算這個陣列不是空的，status/verses 仍然是其他來源正常查到的結果
-    let sourceErrors: [String]?
-
-    enum CodingKeys: String, CodingKey {
-        case status, verses, error
-        case sourceErrors = "source_errors"
-    }
-}
+// 查詢、產生 Keynote 的邏輯都在 RemaCore（以前是透過 Process 呼叫 Ruby 的 *_cli.rb，JSON 交換資料），
+// 這裡只是把 RemaCore 包成 UI 好用的形狀：錯誤統一成帶 detail 的型別、callback 回到 main thread。
+// @_exported 讓 App 裡其他檔案不用各自 import RemaCore 就能用 QueriedVerseGroup 這些型別
 
 struct QueryError: Error {
     let message: String
-    // CLI 側 warn 印出的診斷內容（例如 SpringBibleService 重試紀錄），拿去給彈窗複製用
+    // 給彈窗複製用的完整診斷內容
     let detail: String?
 
     init(message: String, detail: String? = nil) {
@@ -47,148 +20,36 @@ struct QueryError: Error {
 // 這樣 UI 才知道不用彈錯誤詳情視窗，只要把狀態列切成「已取消查詢」就好
 struct QueryCancelledError: Error {}
 
-// command 是 "query"、"generate"、"layouts" 或 "documents"，對照下面各自對應的 CLI 腳本。
-//
-// 一律直接跑這台機器上原始碼樹裡的腳本（之前試過把 ruby 打包進 app，但那是打包當下程式碼的快照，
-// 改了 src/ 或 CLI 腳本卻忘了重新打包，app 就會默默跑到舊程式，所以拿掉了）。
-// PATH 裡沒有 ~/.rbenv/shims，`env ruby` 會掉回 macOS 內建的系統 Ruby
-// （版本很舊、跟 rbenv 管理的版本行為不一致），所以直接指到 rbenv shim，不要依賴 PATH 去猜。
-// 沒有 rbenv 的機器（例如同工跑 install.command 裝的是 Homebrew Ruby，nokogiri 也裝在那份底下）
-// 再依序找 Homebrew 的 Ruby（Apple Silicon 在 /opt/homebrew、Intel 在 /usr/local）。
-private let rubyCandidates: [String] = [
-    FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".rbenv/shims/ruby").path,
-    "/opt/homebrew/opt/ruby/bin/ruby",
-    "/usr/local/opt/ruby/bin/ruby",
-]
-
-private func configureRubyProcess(_ process: Process, command: String, arguments: [String]) {
-    let scriptName: String
-    switch command {
-    case "query": scriptName = "advanced_bible_query_cli.rb"
-    case "layouts": scriptName = "list_keynote_layouts_cli.rb"
-    case "documents": scriptName = "list_keynote_open_documents_cli.rb"
-    default: scriptName = "generate_keynote_cli.rb"
-    }
-    // #filePath 在 Sources/AdvancedBibleQueryApp/QueryModels.swift，
-    // 往上三層回到 swift_app 目錄，對照 advanced_bible_query_cli.rb / generate_keynote_cli.rb 所在位置
-    let scriptPath = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent(scriptName)
-        .path
-
-    if let rubyPath = rubyCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
-        process.executableURL = URL(fileURLWithPath: rubyPath)
-        process.arguments = [scriptPath] + arguments
-    } else {
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["ruby", scriptPath] + arguments
-    }
-}
-
-// 跑 advanced_bible_query_cli.rb 的查詢任務，跟舊版 runBibleQueryCLI（單純同步等到底）不一樣的地方：
-// 這支能被使用者按下「取消」時真的把底層的 ruby process 終止掉，不是單純放著不管結果。
-//
-// stdout/stderr 都用 readabilityHandler 非同步邊產生邊讀，而不是等 waitUntilExit() 後才一次讀完——
-// 一次讀完是舊版的做法，查詢結果的 JSON 只要大一點（塞爆 pipe 緩衝區）就有機會卡死：
-// 子行程寫 stdout 寫到緩衝區滿了會被系統擋住，但我們這邊還在等它先結束才要讀，雙方互等。
-// 所有共用的可變狀態（緩衝區、是否取消）都只能在 ioQueue 這條序列 queue 上動，
-// 避免兩個 pipe 的 readabilityHandler（各自跑在系統管理的併發 queue 上）互相搶。
+// 查經文的任務。使用者按下「取消」時真的把進行中的網路請求取消掉，
+// 不然取消後那個查詢還在背景繼續打外部聖經網站，下次查詢又會多起一支同時在跑
 final class BibleQueryTask {
-    private let process = Process()
-    private let ioQueue = DispatchQueue(label: "BibleQueryTask.io")
-    private var stdoutData = Data()
-    private var stderrText = ""
-    private var isCancelled = false
-    private var didFinish = false
+    private var task: Task<Void, Never>?
 
     func start(
         rawText: String,
         enabledTokens: String,
         completion: @escaping (Result<(String, [QueriedVerseGroup], [String]), Error>) -> Void
     ) {
-        configureRubyProcess(process, command: "query", arguments: [rawText, enabledTokens])
-
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty, let self else { return }
-            self.ioQueue.async { self.stdoutData.append(data) }
-        }
-
-        stderrPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty, let self, let text = String(data: data, encoding: .utf8) else { return }
-            self.ioQueue.async { self.stderrText += text }
-        }
-
-        process.terminationHandler = { [weak self] _ in
-            guard let self else { return }
-            self.ioQueue.async {
-                // process 結束不代表兩個 readabilityHandler 都已經把最後一批資料收完，
-                // 這裡先關掉 handler 再用 readDataToEndOfFile 把管線剩下的內容一次讀乾淨
-                stdoutPipe.fileHandleForReading.readabilityHandler = nil
-                stderrPipe.fileHandleForReading.readabilityHandler = nil
-                let leftoverOut = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-                if !leftoverOut.isEmpty { self.stdoutData.append(leftoverOut) }
-                let leftoverErr = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                if !leftoverErr.isEmpty, let text = String(data: leftoverErr, encoding: .utf8) {
-                    self.stderrText += text
-                }
-                self.finish(completion: completion)
+        let sources = BibleSource.parse(tokens: enabledTokens)
+        task = Task {
+            let result: Result<(String, [QueriedVerseGroup], [String]), Error>
+            do {
+                let outcome = try await BibleVerseQuery.run(rawText, sources: sources)
+                result = .success((outcome.status, outcome.verses, outcome.sourceErrors))
+            } catch is CancellationError {
+                result = .failure(QueryCancelledError())
+            } catch {
+                result = Task.isCancelled
+                    ? .failure(QueryCancelledError())
+                    : .failure(QueryError(message: error.localizedDescription, detail: String(describing: error)))
             }
-        }
-
-        do {
-            try process.run()
-        } catch {
-            completion(.failure(QueryError(message: "無法啟動 ruby: \(error.localizedDescription)")))
+            await MainActor.run { completion(result) }
         }
     }
 
-    // 只能在 ioQueue 上呼叫
-    private func finish(completion: @escaping (Result<(String, [QueriedVerseGroup], [String]), Error>) -> Void) {
-        guard !didFinish else { return }
-        didFinish = true
-        let stdoutData = self.stdoutData
-        let stderrText = self.stderrText
-        let wasCancelled = self.isCancelled
-
-        DispatchQueue.main.async {
-            if wasCancelled {
-                completion(.failure(QueryCancelledError()))
-                return
-            }
-            guard let decoded = try? JSONDecoder().decode(QueryResult.self, from: stdoutData) else {
-                let rawOutput = String(data: stdoutData, encoding: .utf8) ?? ""
-                let detail = [stderrText, rawOutput].filter { !$0.isEmpty }.joined(separator: "\n")
-                completion(.failure(QueryError(message: "無法解析輸出" + (detail.isEmpty ? "" : ": \(detail)"), detail: detail)))
-                return
-            }
-            if let error = decoded.error {
-                completion(.failure(QueryError(message: error, detail: stderrText)))
-                return
-            }
-            completion(.success((decoded.status ?? "", decoded.verses ?? [], decoded.sourceErrors ?? [])))
-        }
-    }
-
-    // 真的把底層 ruby process 終止掉（SIGTERM），不是單純不理會結果——
-    // 不然使用者取消後那個查詢還在背景繼續打外部聖經網站，下次查詢又會多起一支同時在跑
     func cancel() {
-        ioQueue.async { self.isCancelled = true }
-        process.terminate()
+        task?.cancel()
     }
-}
-
-private struct KeynotePlaceholderPayload: Encodable {
-    var placeholder: String
-    var format: String
 }
 
 struct GenerateKeynoteError: Error {
@@ -199,28 +60,19 @@ struct GenerateKeynoteError: Error {
         self.message = message
         self.detail = detail
     }
-}
 
-private struct GenerateKeynoteResult: Decodable {
-    let status: String?
-    let outputDir: String?
-    let keynotePath: String?
-    let errors: [String]?
-    let error: String?
-
-    enum CodingKeys: String, CodingKey {
-        case status
-        case outputDir = "output_dir"
-        case keynotePath = "keynote_path"
-        case errors
-        case error
+    init(_ error: Error) {
+        self.init(message: error.localizedDescription)
     }
 }
 
-// 對照 generate_keynote_cli.rb：查經文 -> 依 placeholders 範本代換 -> KeynoteRunner(osascript) 套進範本輸出投影片。
-// 跟查詢本身分開一支 CLI，因為這一步真的會動 Keynote App（開檔、加投影片、匯出、關檔），
+typealias KeynoteOpenDocument = KeynoteRunner.OpenDocument
+
+// 查經文 -> 依 placeholders 範本代換 -> KeynoteRunner(osascript) 套進範本輸出投影片。
+// 跟查詢本身分開，因為這一步真的會動 Keynote App（開檔、加投影片、匯出、存檔），
 // 觸發時機（按下「產生 Keynote」）跟查詢預覽（按下「查詢」）不一樣。
-func runGenerateKeynoteCLI(
+// 回傳 (狀態, 輸出資料夾, 簡報路徑, 警告)
+func generateBibleKeynote(
     rawText: String,
     enabledTokens: String,
     templatePath: String,
@@ -228,122 +80,44 @@ func runGenerateKeynoteCLI(
     placeholders: [KeynotePlaceholder],
     masterName: String?,
     exportImages: Bool
-) -> Result<(String, String?, String?, [String]), GenerateKeynoteError> {
-    let payload = placeholders.map { KeynotePlaceholderPayload(placeholder: $0.placeholder, format: $0.format) }
-    guard let placeholdersData = try? JSONEncoder().encode(payload),
-          let placeholdersJSON = String(data: placeholdersData, encoding: .utf8)
-    else {
-        return .failure(GenerateKeynoteError(message: "無法編碼 placeholder 資料"))
-    }
-
-    let process = Process()
-    configureRubyProcess(
-        process,
-        command: "generate",
-        arguments: [rawText, enabledTokens, templatePath, outputDir, placeholdersJSON, masterName ?? "", exportImages ? "1" : "0"]
-    )
-
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
-
+) async -> Result<(String, String?, String?, [String]), GenerateKeynoteError> {
     do {
-        try process.run()
+        let outcome = try await BibleKeynoteGenerator.generate(
+            rawText: rawText,
+            sources: BibleSource.parse(tokens: enabledTokens),
+            template: URL(fileURLWithPath: templatePath),
+            outputDir: URL(fileURLWithPath: outputDir),
+            placeholders: placeholders.map { .init(placeholder: $0.placeholder, format: $0.format) },
+            masterName: masterName,
+            exportImages: exportImages
+        )
+        return .success((outcome.status, outcome.outputDir.path, outcome.keynotePath.path, outcome.warnings))
     } catch {
-        return .failure(GenerateKeynoteError(message: "無法啟動 ruby: \(error.localizedDescription)"))
+        return .failure(GenerateKeynoteError(message: "產生失敗: \(error.localizedDescription)"))
     }
-    process.waitUntilExit()
-
-    let data = stdout.fileHandleForReading.readDataToEndOfFile()
-    let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-
-    guard let decoded = try? JSONDecoder().decode(GenerateKeynoteResult.self, from: data) else {
-        let rawOutput = String(data: data, encoding: .utf8) ?? ""
-        let detail = [stderrText, rawOutput].filter { !$0.isEmpty }.joined(separator: "\n")
-        return .failure(GenerateKeynoteError(message: "無法解析輸出" + (detail.isEmpty ? "" : ": \(detail)"), detail: detail))
-    }
-    if let error = decoded.error {
-        return .failure(GenerateKeynoteError(message: error, detail: stderrText))
-    }
-    return .success((decoded.status ?? "", decoded.outputDir, decoded.keynotePath, decoded.errors ?? []))
 }
 
-private struct ListKeynoteLayoutsResult: Decodable {
-    let layouts: [String]?
-    let error: String?
-}
-
-// 對照 list_keynote_layouts_cli.rb：叫 Keynote 開範本讀出所有母片名稱（讀完就關檔不存），
-// 給產生 Keynote 前挑母片用。錯誤沿用 GenerateKeynoteError，因為這一步就是產生流程的一部分。
-func runListKeynoteLayoutsCLI(templatePath: String) -> Result<[String], GenerateKeynoteError> {
-    let process = Process()
-    configureRubyProcess(process, command: "layouts", arguments: [templatePath])
-
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
-
+// 叫 Keynote 開範本讀出所有母片名稱（讀完就關檔不存），給產生 Keynote 前挑母片用。
+// 錯誤沿用 GenerateKeynoteError，因為這一步就是產生流程的一部分
+func listKeynoteLayouts(templatePath: String) -> Result<[String], GenerateKeynoteError> {
+    guard FileManager.default.fileExists(atPath: templatePath) else {
+        return .failure(GenerateKeynoteError(message: "找不到範本檔案: \(templatePath)"))
+    }
     do {
-        try process.run()
+        return .success(try KeynoteRunner.layoutNames(template: URL(fileURLWithPath: templatePath)))
     } catch {
-        return .failure(GenerateKeynoteError(message: "無法啟動 ruby: \(error.localizedDescription)"))
+        return .failure(GenerateKeynoteError(
+            message: "讀取母片失敗（請確認 Keynote 已安裝、範本檔案可開啟）",
+            detail: error.localizedDescription))
     }
-    process.waitUntilExit()
-
-    let data = stdout.fileHandleForReading.readDataToEndOfFile()
-    let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-
-    guard let decoded = try? JSONDecoder().decode(ListKeynoteLayoutsResult.self, from: data) else {
-        let rawOutput = String(data: data, encoding: .utf8) ?? ""
-        let detail = [stderrText, rawOutput].filter { !$0.isEmpty }.joined(separator: "\n")
-        return .failure(GenerateKeynoteError(message: "無法解析母片清單" + (detail.isEmpty ? "" : ": \(detail)"), detail: detail))
-    }
-    if let error = decoded.error {
-        return .failure(GenerateKeynoteError(message: error, detail: stderrText))
-    }
-    return .success(decoded.layouts ?? [])
 }
 
-struct KeynoteOpenDocument: Decodable {
-    let path: String
-    let modified: Bool
-}
-
-private struct ListKeynoteOpenDocumentsResult: Decodable {
-    let documents: [KeynoteOpenDocument]?
-    let error: String?
-}
-
-// 對照 list_keynote_open_documents_cli.rb：列出 Keynote 目前開著（且存過檔）的文件，給挑範本時直接選。
+// 列出 Keynote 目前開著（且存過檔）的文件，給挑範本時直接選。
 // Keynote 沒在跑就回空陣列，不會把 Keynote 叫起來
-func runListKeynoteOpenDocumentsCLI() -> Result<[KeynoteOpenDocument], GenerateKeynoteError> {
-    let process = Process()
-    configureRubyProcess(process, command: "documents", arguments: [])
-
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
-
+func listKeynoteOpenDocuments() -> Result<[KeynoteOpenDocument], GenerateKeynoteError> {
     do {
-        try process.run()
+        return .success(try KeynoteRunner.openDocuments())
     } catch {
-        return .failure(GenerateKeynoteError(message: "無法啟動 ruby: \(error.localizedDescription)"))
+        return .failure(GenerateKeynoteError(message: "讀取 Keynote 開啟中的檔案失敗：\(error.localizedDescription)"))
     }
-    process.waitUntilExit()
-
-    let data = stdout.fileHandleForReading.readDataToEndOfFile()
-    let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-
-    guard let decoded = try? JSONDecoder().decode(ListKeynoteOpenDocumentsResult.self, from: data) else {
-        let rawOutput = String(data: data, encoding: .utf8) ?? ""
-        let detail = [stderrText, rawOutput].filter { !$0.isEmpty }.joined(separator: "\n")
-        return .failure(GenerateKeynoteError(message: "無法解析開啟中的檔案清單" + (detail.isEmpty ? "" : ": \(detail)"), detail: detail))
-    }
-    if let error = decoded.error {
-        return .failure(GenerateKeynoteError(message: error, detail: stderrText))
-    }
-    return .success(decoded.documents ?? [])
 }

@@ -19,18 +19,9 @@ struct BibleSearchResultView: View {
     @State private var generateErrorDetail: String?
     @State private var isGenerateErrorDisplaying = false
 
-    // #filePath 在 Sources/AdvancedBibleQueryApp/BibleSearchResultView.swift，
-    // 往上三層回到 swift_app 目錄，對照 advanced_bible_query_cli.rb / generate_keynote_cli.rb 所在位置
-    private let scriptDir = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-
-    // scriptDir(swift_app) 再往上兩層是專案根目錄，keynotes/ 底下放現成的範本檔，
-    // 挑範本檔的面板預設從這裡開，使用者少翻幾層資料夾
+    // 專案根目錄的 keynotes/ 底下放現成的範本檔，挑範本檔的面板預設從這裡開，使用者少翻幾層資料夾
     private var defaultTemplateDir: URL {
-        scriptDir.deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("keynotes")
+        RemaPaths.repositoryRoot.appendingPathComponent("keynotes")
     }
 
     var result: BibleSearchResult? {
@@ -123,7 +114,7 @@ struct BibleSearchResultView: View {
         isGeneratingKeynote = true
         Task.detached {
             // 問不到開著的檔案（例如沒給 Keynote 自動化權限）不算錯，直接退回只用檔案面板挑範本
-            let openDocuments = (try? runListKeynoteOpenDocumentsCLI().get()) ?? []
+            let openDocuments = (try? listKeynoteOpenDocuments().get()) ?? []
             await MainActor.run {
                 guard let templateURL = pickTemplate(openDocuments: openDocuments) else {
                     isGeneratingKeynote = false
@@ -136,7 +127,7 @@ struct BibleSearchResultView: View {
 
     private func chooseMasterAndGenerate(for result: BibleSearchResult, templateURL: URL) {
         Task.detached {
-            let layoutsOutcome = runListKeynoteLayoutsCLI(templatePath: templateURL.path)
+            let layoutsOutcome = listKeynoteLayouts(templatePath: templateURL.path)
             await MainActor.run {
                 switch layoutsOutcome {
                 case .success(let layouts):
@@ -173,7 +164,7 @@ struct BibleSearchResultView: View {
         let resultPlaceholders = store.placeholders
 
         Task.detached {
-            let outcome = runGenerateKeynoteCLI(
+            let outcome = await generateBibleKeynote(
                 rawText: rawText,
                 enabledTokens: enabledTokens,
                 templatePath: templateURL.path,

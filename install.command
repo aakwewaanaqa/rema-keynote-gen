@@ -24,42 +24,16 @@ echo ""
 
 # ── 1. Xcode Command Line Tools ──────────────────────────────
 # git、swift（SwiftPM）、clang、macOS SDK 都在這包裡，不需要裝完整的 Xcode.app。
-# Homebrew 安裝程式其實也會自己裝，但它是無聲地在背景跑 softwareupdate、要等很久，
-# 先在這裡用系統的安裝視窗裝好，使用者看得到進度。
-echo "[1/5] 檢查開發工具（Command Line Tools）..."
+# 整個程式都是 Swift 寫的，不需要 Homebrew、Ruby 或其他套件。
+echo "[1/3] 檢查開發工具（Command Line Tools）..."
 if ! xcode-select -p &>/dev/null; then
   xcode-select --install &>/dev/null
   fail "請在剛才跳出的視窗按『安裝』（大約需要 5～15 分鐘）。
 安裝完成後，請重新雙擊這個檔案。"
 fi
 
-# ── 2. Homebrew ──────────────────────────────────────────────
-# 系統內建的 Ruby 是 SIP 保護的唯讀目錄，裝不了 nokogiri 這種原生擴充 gem，
-# 所以一律改用 Homebrew 的 Ruby。
-echo "[2/5] 檢查 Homebrew..."
-
-# 每台 Mac 開新的 Terminal session 時，/opt/homebrew/bin（Apple Silicon）或 /usr/local/bin
-# （Intel）不一定在 PATH 上——官方安裝完會請使用者自己把 `brew shellenv` 加進 shell 設定檔，
-# 但這個腳本是雙擊執行、不會讀那份設定檔，所以這裡自己找路徑、手動 eval 一次
-load_brew() {
-  for brew_path in /opt/homebrew/bin/brew /usr/local/bin/brew; do
-    if [ -x "$brew_path" ]; then
-      eval "$("$brew_path" shellenv)"
-      return
-    fi
-  done
-}
-
-load_brew
-if ! command -v brew &>/dev/null; then
-  echo "還沒有安裝 Homebrew，正在自動安裝（會要你輸入 Mac 的登入密碼）..."
-  NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  load_brew
-  command -v brew &>/dev/null || fail "Homebrew 安裝好像沒有成功，請重新雙擊這個檔案再試一次。"
-fi
-
-# ── 3. 下載／更新程式 ─────────────────────────────────────────
-echo "[3/5] 下載程式..."
+# ── 2. 下載／更新程式 ─────────────────────────────────────────
+echo "[2/3] 下載程式..."
 ALREADY_INSTALLED=false
 if [ -d "$INSTALL_DIR/.git" ]; then
   ALREADY_INSTALLED=true
@@ -71,19 +45,8 @@ fi
 
 chmod +x "$INSTALL_DIR/start.command"
 
-# ── 4. Ruby 與套件 ────────────────────────────────────────────
-echo "[4/5] 檢查 Ruby 與套件..."
-BREW_RUBY_PREFIX="$(brew --prefix ruby 2>/dev/null)"
-if [ -z "$BREW_RUBY_PREFIX" ] || [ ! -x "$BREW_RUBY_PREFIX/bin/ruby" ]; then
-  echo "正在安裝 Ruby（透過 Homebrew，第一次會花幾分鐘）..."
-  brew install ruby || fail "Ruby 安裝失敗，請重新雙擊這個檔案再試一次。"
-  BREW_RUBY_PREFIX="$(brew --prefix ruby)"
-fi
-
-(cd "$INSTALL_DIR" && "$BREW_RUBY_PREFIX/bin/bundle" install) || fail "套件安裝失敗，請重新雙擊這個檔案再試一次。"
-
-# ── 5. 編譯 swift_app ─────────────────────────────────────────
-echo "[5/5] 編譯 App（第一次會花幾分鐘）..."
+# ── 3. 編譯 swift_app ─────────────────────────────────────────
+echo "[3/3] 編譯 App（第一次會花幾分鐘）..."
 
 # xcode-select 指到還沒同意授權條款的 Xcode.app 時，swift 會直接失敗，這裡先擋下來講清楚
 SWIFT_VERSION_OUTPUT="$(swift --version 2>&1)" || fail "找不到可以用的 swift。

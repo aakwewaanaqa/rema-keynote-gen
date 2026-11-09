@@ -1,7 +1,7 @@
 import SwiftUI
 
-// App 開啟後的第一個畫面：選要「查經文」還是「歌詞整理」，各自開獨立視窗
-// （WindowGroup id "bible-query" / "lyrics-composer"，見 AdvancedBibleQueryApp.swift）。
+// App 開啟後的第一個畫面：選要「查經文」、「歌詞整理」還是「歌詞產生 Keynote」，各自開獨立視窗
+// （WindowGroup id "bible-query" / "lyrics-composer" / "lyrics-keynote"，見 AdvancedBibleQueryApp.swift）。
 // 這個入口視窗選完之後不會自動關閉，方便之後想切換另一項功能時直接回來點。
 struct HomeView: View {
     @Environment(\.openWindow) private var openWindow
@@ -28,10 +28,17 @@ struct HomeView: View {
                 ) {
                     openWindow(id: "lyrics-composer")
                 }
+                optionCard(
+                    title: "歌詞產生 Keynote",
+                    subtitle: "整個資料夾的歌詞 TXT 套範本、匯出 PNG",
+                    icon: "rectangle.stack"
+                ) {
+                    openWindow(id: "lyrics-keynote")
+                }
             }
         }
         .padding(40)
-        .frame(minWidth: 480, minHeight: 320)
+        .frame(minWidth: 680, minHeight: 320)
     }
 
     private func optionCard(
