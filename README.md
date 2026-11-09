@@ -4,19 +4,43 @@
 
 ## 需求
 
-- macOS
+- macOS 13 Ventura 以上（Apple Silicon 與 Intel Mac 都可以）
 - Keynote（App Store）
-- Git（第一次安裝時系統會自動提示）
+- 網路連線（查詢經文用）
 
-## 安裝
+## 安裝：依 macOS 版本選擇
 
-分享 `install.command` 給同工，雙擊執行，照指示操作即可。
-安裝完成後 `~/Documents/rema-keynote-gen` 會出現程式資料夾。
-在 Finder 按 `Cmd + Shift + O` 可以快速開啟文件夾。
+先到「 → 關於這台 Mac」看 macOS 版本。
+
+| macOS 版本 | 安裝方式 | 更新方式 |
+| --- | --- | --- |
+| 13.5 以上（Ventura 13.5、Sonoma、Sequoia、Tahoe…） | `install.command`（建議） | 雙擊 `start.command` 自動更新 |
+| 13.0 ～ 13.4，或裝不了開發工具的電腦 | 下載 [Release](https://github.com/aakwewaanaqa/rema-keynote-gen/releases/latest) | 回 Release 頁面重新下載 |
+| 12 Monterey 以下 | 不支援，請先升級 macOS | — |
+
+> `install.command` 會在本機編譯 App，需要 Swift 5.9 以上的 Command Line Tools，
+> 而這一版只能裝在 macOS 13.5 以上；比較舊的系統請直接下載已經編好的 Release。
+
+### 新版 macOS：用 `install.command`
+
+1. 分享 `install.command` 給同工，雙擊執行
+   （如果出現「無法打開」，按右鍵 → 打開；或到「系統設定 → 隱私權與安全性」按「強制打開」）
+2. 第一次執行會跳出安裝「Command Line Tools」的視窗，按「安裝」，裝完後**重新雙擊** `install.command`
+3. 程式會下載到 `~/Documents/rema-keynote-gen`、編譯完成後自動開啟 App
+   （在 Finder 按 `Cmd + Shift + O` 可以快速開啟文件夾）
+4. 之後每次使用：雙擊資料夾裡的 `start.command`，會自動更新到最新版、重新編譯並開啟 App
+
+### 舊版 macOS：用 Release
+
+1. 打開 [Release 頁面](https://github.com/aakwewaanaqa/rema-keynote-gen/releases/latest)，下載 `AdvancedBibleQueryApp-x.y.z.zip`
+2. 雙擊解壓縮，把 `AdvancedBibleQueryApp.app` 拖進「應用程式」資料夾
+3. 雙擊打開就能用（已經過 Apple 公證，不會跳安全性警告）
+
+Release 版不會自動更新，有新版本時請回到 Release 頁面重新下載。
+
+> 不論哪種方式，第一次產生 Keynote 時 macOS 會詢問是否允許控制 Keynote，請按「好」。
 
 ## 執行
-
-雙擊 `start.command`，每次執行會自動更新到最新版、重新編譯並開啟 App。
 
 App 首頁有三個功能：
 
