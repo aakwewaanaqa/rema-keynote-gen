@@ -69,19 +69,27 @@ public enum BibleQuery {
     public static func run(_ rawText: String, sources: [(enabled: Bool, service: any BibleService)]) async throws -> BibleQueryOutcome {
         let query = SearchDsl.parse(rawText)
 
-        let results = await withTaskGroup(of: (Int, Result<[BibleVerse], Error>).self) { group in
+        // 子任務的結果用具名 struct 回傳，不要用 (Int, Result<[BibleVerse], Error>) 這種 tuple：
+        // Swift 6.4 release 編譯（package_app.sh 用的就是 release）下，task group 回傳這個 tuple 時
+        // Int 會變成 0，所有來源的經文都塞進第 0 格（麥可陳）互相覆蓋；debug 編譯正常，所以只有打包後的 App 會錯
+        struct SourceResult: Sendable {
+            let index: Int
+            let result: Result<[BibleVerse], Error>
+        }
+
+        let results = await withTaskGroup(of: SourceResult.self) { group in
             for (idx, source) in sources.enumerated() where source.enabled {
                 group.addTask {
                     do {
-                        return (idx, .success(try await source.service.query(query)))
+                        return SourceResult(index: idx, result: .success(try await source.service.query(query)))
                     } catch {
-                        return (idx, .failure(error))
+                        return SourceResult(index: idx, result: .failure(error))
                     }
                 }
             }
-            var collected: [(Int, Result<[BibleVerse], Error>)] = []
+            var collected: [SourceResult] = []
             for await item in group { collected.append(item) }
-            return collected.sorted { $0.0 < $1.0 }
+            return collected.sorted { $0.index < $1.index }
         }
         try Task.checkCancellation()
 
@@ -91,8 +99,9 @@ public enum BibleQuery {
         var grouped: [Key: [String]] = [:]
         var sourceErrors: [String] = []
 
-        for (idx, result) in results {
-            switch result {
+        for item in results {
+            let idx = item.index
+            switch item.result {
             case .success(let verses):
                 for v in verses {
                     let key = Key(book: v.book, chapter: v.chapter, verse: v.verse)

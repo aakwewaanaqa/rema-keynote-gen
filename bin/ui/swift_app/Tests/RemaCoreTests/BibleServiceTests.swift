@@ -107,6 +107,24 @@ final class BibleVerseQueryTests: XCTestCase {
         XCTAssertEqual(outcome.entries, [BibleQueryEntry(book: "Genesis", chapter: 1, verse: 1, texts: ["", "ok", ""])])
         XCTAssertEqual(outcome.sourceErrors, ["Broken: 原站故障"])
     }
+
+    // 勾 CUV＋NIV 時，經文要各自落在自己來源的那一格，不能全擠到第 0 格（麥可陳）。
+    // 這個錯只在 release 編譯出現，要用 swift test -c release -Xswiftc -enable-testing 才驗得到
+    func testEachSourceKeepsItsOwnIndex() async throws {
+        struct Fixed: BibleService {
+            let name: String
+            let text: String
+            func query(_ query: SearchDsl.Query) async throws -> [BibleVerse] {
+                [BibleVerse(book: "Acts", chapter: 24, verse: 10, text: text)]
+            }
+        }
+        let outcome = try await BibleQuery.run("徒24:10", sources: [
+            (false, Fixed(name: "local", text: "麥可陳")),
+            (true, Fixed(name: "fhl", text: "中文")),
+            (true, Fixed(name: "niv", text: "English")),
+        ])
+        XCTAssertEqual(outcome.entries, [BibleQueryEntry(book: "Acts", chapter: 24, verse: 10, texts: ["", "中文", "English"])])
+    }
 }
 
 // 打真的外部網站，對照原本的 tests/test_bible_gateway_service.rb。

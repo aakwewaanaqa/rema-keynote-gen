@@ -22,6 +22,9 @@
     <true/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
+    <!-- 第一次控制 Keynote 時 macOS 跳的權限詢問視窗裡顯示的說明 -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>需要控制 Keynote 來開啟範本、產生投影片與匯出圖片。</string>
     <!-- 韓文개역개정來源（HolyBibleKoreanService）的 holybible.or.kr 只有 http，ATS 預設會擋 -->
     <key>NSAppTransportSecurity</key>
     <dict>
