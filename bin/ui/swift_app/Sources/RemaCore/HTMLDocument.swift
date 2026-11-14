@@ -6,6 +6,8 @@ import libxml2
 // 網頁編碼（信望愛是 Big5、holybible.or.kr 是 EUC-KR）直接交給 libxml2 轉，不用先自己轉成 UTF-8。
 final class HTMLDocument {
     fileprivate let doc: htmlDocPtr
+    // remove() 拆下來的節點不在樹上，xmlFreeDoc 不會管，等 document 釋放時一起 free
+    fileprivate var detached: [xmlNodePtr] = []
 
     init?(data: Data, encoding: String) {
         let options = Int32(
@@ -20,6 +22,7 @@ final class HTMLDocument {
     }
 
     deinit {
+        detached.forEach { xmlFreeNode($0) }
         xmlFreeDoc(doc)
     }
 
@@ -64,10 +67,14 @@ struct HTMLNode {
         document.evaluate(xpath, from: node)
     }
 
-    // 從樹上拿掉並釋放，等同 Nokogiri 的 node.remove。呼叫後這個 HTMLNode 不能再使用
+    // 從樹上拿掉，等同 Nokogiri 的 node.remove。
+    // 不能當場 xmlFreeNode：XPath 結果常有巢狀節點（例如 h3 裡的 sup.footnote），
+    // 先 free 外層會連子樹一起釋放，輪到內層時就 double free。
+    // 改成只 unlink、交給 document 在 deinit 時釋放；內層節點會先從外層拆出來，所以每個節點只 free 一次。
     func remove() {
+        guard !document.detached.contains(node) else { return }
         xmlUnlinkNode(node)
-        xmlFreeNode(node)
+        document.detached.append(node)
     }
 }
 
